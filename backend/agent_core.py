@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
 from crewai import Agent, Task, Crew, Process, LLM
-from tools import academic_search_tool, dynamic_web_scraper_tool, google_scholar_tool, sinta_scraper_tool
+from tools import academic_search_tool, dynamic_web_scraper_tool, google_scholar_tool, sinta_scraper_tool, cv_generator_tool
 import re
 from collections import OrderedDict
 
@@ -12,6 +12,7 @@ class HybridRAG:
     HYBRID RAG System:
     - Simple queries (lists) → DIRECT execution (NO CrewAI!)
     - Complex queries → CrewAI with strict limits
+    - CV Generation → Special handling with CV tool
     """
     
     def __init__(self):
@@ -33,6 +34,11 @@ class HybridRAG:
         print("="*70)
         print(f"Query: {user_query}")
         
+        # Check if user wants to generate CV
+        if self._is_cv_request(user_query):
+            print("[ROUTING] CV GENERATION REQUEST → CV Tool")
+            return self._handle_cv_request(user_query)
+        
         is_simple = self._is_simple_list_query(user_query)
         
         if is_simple:
@@ -41,6 +47,54 @@ class HybridRAG:
         else:
             print("[ROUTING] COMPLEX QUERY → CrewAI Agent")
             return self._crewai_complex_query(user_query, user_urls)
+    
+    def _is_cv_request(self, query: str) -> bool:
+        """Detect if user is requesting CV generation."""
+        query_lower = query.lower()
+        cv_keywords = [
+            'generate cv', 'create cv', 'make cv', 'download cv',
+            'buat cv', 'buatkan cv', 'generate curriculum vitae',
+            'create curriculum vitae', 'cv untuk', 'cv for'
+        ]
+        return any(kw in query_lower for kw in cv_keywords)
+    
+    def _handle_cv_request(self, query: str) -> str:
+        """Handle CV generation request by extracting professor name."""
+        # Extract professor name from query
+        # Simple extraction: look for name after "for" or "untuk"
+        query_lower = query.lower()
+        
+        name = None
+        if ' for ' in query_lower:
+            name = query.split(' for ', 1)[1].strip()
+        elif ' untuk ' in query_lower:
+            name = query.split(' untuk ', 1)[1].strip()
+        else:
+            # Try to find name pattern (Prof., Dr., etc.)
+            import re
+            name_pattern = r'((?:Prof\.?\s*)?(?:Dr\.?\s*)?(?:Ir\.?\s*)?[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)'
+            match = re.search(name_pattern, query)
+            if match:
+                name = match.group(1)
+        
+        if not name:
+            return """❌ Could not identify professor name for CV generation.
+
+Please specify the professor name clearly, for example:
+- "Generate CV for Prof. Dr. Riri Fitri Sari"
+- "Create CV untuk Prof. Muhammad Suryanegara"
+- "Buatkan CV Prof. Dadang Gunawan"
+
+Then I'll gather all available information and prepare the CV for download."""
+        
+        # Use CV Generator Tool
+        print(f"[CV_HANDLER] Generating CV for: {name}")
+        try:
+            result = cv_generator_tool._run(name)
+            return result
+        except Exception as e:
+            print(f"[CV_HANDLER ERROR] {e}")
+            return f"❌ Error generating CV: {str(e)}\n\nPlease try again or contact support."
     
     def _is_simple_list_query(self, query: str) -> bool:
         """Detect if query is just asking for a simple list."""
@@ -276,7 +330,7 @@ Extract now with SIMPLE and CLEAN format:"""
                 # Keep non-name lines (headers, etc.)
                 deduplicated_lines.append(line)
         
-        return '\n'.join(deduplicated_lines)  # FIXED: Added missing quote before .join()
+        return '\n'.join(deduplicated_lines)
     
     def _crewai_complex_query(self, query: str, user_urls: list = None) -> str:
         """Use CrewAI for complex queries that need multi-step reasoning."""
@@ -298,6 +352,7 @@ Extract now with SIMPLE and CLEAN format:"""
                     sinta_scraper_tool,
                     google_scholar_tool,
                     dynamic_web_scraper_tool,
+                    cv_generator_tool,
                 ],
                 llm=self.llm,
                 verbose=True,

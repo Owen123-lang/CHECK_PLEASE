@@ -7,15 +7,22 @@ interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
+  sessionId?: string;
 }
 
-export default function ChatPanel() {
+interface ChatPanelProps {
+  onSessionUpdate?: (sessionId: string) => void;
+  onMessageUpdate?: (message: string) => void;
+}
+
+export default function ChatPanel({ onSessionUpdate, onMessageUpdate }: ChatPanelProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sourceUrls, setSourceUrls] = useState<string[]>([]);
   const [tempUrl, setTempUrl] = useState('');
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -32,7 +39,6 @@ export default function ChatPanel() {
       content: input.trim()
     };
 
-    // Simpan URL saat ini dan reset
     const currentSourceUrls = sourceUrls;
     setMessages(prev => [...prev, userMessage]);
     setInput('');
@@ -46,7 +52,8 @@ export default function ChatPanel() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           message: userMessage.content,
-          user_urls: currentSourceUrls.length > 0 ? currentSourceUrls : null
+          user_urls: currentSourceUrls.length > 0 ? currentSourceUrls : null,
+          session_id: sessionId
         }),
       });
 
@@ -55,15 +62,27 @@ export default function ChatPanel() {
       }
 
       const data = await response.json();
+      
+      // Update session ID
+      if (data.session_id) {
+        setSessionId(data.session_id);
+        onSessionUpdate?.(data.session_id);
+      }
+      
       const assistantMessage: Message = {
         id: String(Date.now() + 1),
         role: 'assistant',
-        content: data.response || "Sorry, I couldn't get a valid response from the AI."
+        content: data.response || "Sorry, I couldn't get a valid response from the AI.",
+        sessionId: data.session_id
       };
 
       setMessages(prev => [...prev, assistantMessage]);
+      
+      // Update last assistant message for CV generation
+      onMessageUpdate?.(data.response);
+
     } catch (err: any) {
-      console.error("Full chat error object:", err); // Log a more detailed error
+      console.error("Full chat error object:", err);
       const errorMessageContent = `Connection Error: Failed to fetch. Check the browser console (F12) for more details. Is the backend server running at http://127.0.0.1:8000?`;
       setError(errorMessageContent);
       
@@ -98,11 +117,16 @@ export default function ChatPanel() {
             <h2 className="text-3xl font-bold text-brand-yellow mb-2">Check Please</h2>
             <p className="text-lg">Your Academic Research Assistant for DTE UI</p>
             <p className="text-sm mt-2">Ready to search academic profiles. Start by asking about a professor or researcher.</p>
+            <div className="mt-6 p-4 bg-gray-800 rounded-lg max-w-md">
+              <p className="text-brand-yellow font-semibold mb-2">💡 Try asking:</p>
+              <p className="text-sm text-gray-400">"Tell me about Prof. Dr. Riri Fitri Sari"</p>
+              <p className="text-xs text-gray-500 mt-2">Then click "Export Profile to PDF" in the Studio panel →</p>
+            </div>
           </div>
         ) : (
           messages.map((m: Message) => (
             <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              <div className={`p-4 rounded-xl max-w-lg shadow-md break-words whitespace-pre-wrap ${
+              <div className={`p-4 rounded-xl shadow-md max-w-2xl break-words whitespace-pre-wrap ${
                 m.role === 'user' 
                   ? 'bg-brand-red text-white' 
                   : 'bg-gray-800 text-gray-200'

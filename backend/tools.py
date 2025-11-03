@@ -577,9 +577,101 @@ class SintaScraperTool(BaseTool):
             return f"Error scraping SINTA profile: {str(e)}"
 
 
+# ========== CV GENERATOR TOOL ==========
+class CVGeneratorInput(BaseModel):
+    """Input schema for CV Generator Tool."""
+    professor_name: str = Field(..., description="Full name of the professor/lecturer to generate CV for")
+
+
+class CVGeneratorTool(BaseTool):
+    name: str = "CV Generator Tool"
+    description: str = (
+        "Generates a professional academic Curriculum Vitae (CV) in PDF format for a specific professor or lecturer. "
+        "This tool MUST be used when user explicitly asks to 'generate CV', 'create CV', 'make CV', or 'download CV'. "
+        "The tool will automatically gather all available information from database, SINTA, and Google Scholar "
+        "to create a comprehensive CV document. "
+        "Input: professor_name (e.g., 'Prof. Dr. Riri Fitri Sari' or 'Muhammad Suryanegara')"
+    )
+    args_schema: Type[BaseModel] = CVGeneratorInput
+
+    def _run(self, professor_name: str) -> str:
+        """Generate CV by collecting comprehensive data about the professor."""
+        print(f"\n[CV_GENERATOR] Starting CV generation for: {professor_name}")
+        
+        collected_data = []
+        
+        # Step 1: Search database
+        print("[CV_GENERATOR] Step 1/4: Searching database...")
+        try:
+            db_result = academic_search_tool._run(professor_name)
+            if db_result and "No relevant information" not in db_result:
+                collected_data.append(f"=== DATABASE INFO ===\n{db_result}")
+                print(f"  ✓ Database: {len(db_result)} chars")
+        except Exception as e:
+            print(f"  ✗ Database error: {e}")
+        
+        # Step 2: Search SINTA
+        print("[CV_GENERATOR] Step 2/4: Searching SINTA...")
+        try:
+            sinta_result = sinta_scraper_tool._run(professor_name)
+            if sinta_result and "Error" not in sinta_result and "No SINTA profile" not in sinta_result:
+                collected_data.append(f"=== SINTA PROFILE ===\n{sinta_result}")
+                print(f"  ✓ SINTA: {len(sinta_result)} chars")
+        except Exception as e:
+            print(f"  ✗ SINTA error: {e}")
+        
+        # Step 3: Search Google Scholar
+        print("[CV_GENERATOR] Step 3/4: Searching Google Scholar...")
+        try:
+            scholar_result = google_scholar_tool._run(professor_name)
+            if scholar_result and "Error" not in scholar_result and "No Google Scholar" not in scholar_result:
+                collected_data.append(f"=== GOOGLE SCHOLAR ===\n{scholar_result}")
+                print(f"  ✓ Scholar: {len(scholar_result)} chars")
+        except Exception as e:
+            print(f"  ✗ Scholar error: {e}")
+        
+        # Step 4: Web search for additional info
+        print("[CV_GENERATOR] Step 4/4: Web search for additional information...")
+        try:
+            web_result = web_search_tool._run(f"{professor_name} Universitas Indonesia publications research")
+            if web_result and len(web_result) > 100:
+                collected_data.append(f"=== WEB SEARCH ===\n{web_result[:1500]}")
+                print(f"  ✓ Web: {len(web_result)} chars")
+        except Exception as e:
+            print(f"  ✗ Web error: {e}")
+        
+        if not collected_data:
+            return f"❌ CV Generation Failed: No data found for '{professor_name}'. Please try a different name or check if the professor exists in the database."
+        
+        # Combine all data
+        full_profile = "\n\n".join(collected_data)
+        
+        print(f"[CV_GENERATOR] ✓ Collected {len(full_profile)} characters of data")
+        print(f"[CV_GENERATOR] CV data ready for PDF generation")
+        
+        # Return structured message for agent
+        return f"""✅ CV DATA COLLECTED SUCCESSFULLY FOR: {professor_name}
+
+📊 Data Sources Used:
+{len(collected_data)} sources compiled
+
+📄 CV Generation Status: READY
+
+The CV will be automatically generated when user clicks the download button.
+
+Would you like me to summarize the key information I found about {professor_name}?
+
+Profile Data Preview:
+{full_profile[:500]}...
+
+[Note: Full CV with all details will be available in the PDF download]
+"""
+
+
 # Initialize tool instances
 web_search_tool = TavilySearchTool()
 academic_search_tool = AcademicSearchTool()
 dynamic_web_scraper_tool = DynamicWebScraperTool()
 google_scholar_tool = GoogleScholarSearchTool()
 sinta_scraper_tool = SintaScraperTool()  # New SINTA tool
+cv_generator_tool = CVGeneratorTool()  # New CV Generator tool

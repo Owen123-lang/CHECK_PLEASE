@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Curriculum Vitae - {{ name }}</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 2cm;
+        }
+        
+        body {
+            font-family: 'Georgia', 'Times New Roman', serif;
+            color: #333;
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+        }
+        
+        .header {
+            text-align: center;
+            border-bottom: 3px solid #D4AF37;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            color: #1a1a1a;
+            font-size: 28px;
+            margin: 0 0 10px 0;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        
+        .header .title {
+            color: #D70000;
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        .header .affiliation {
+            color: #666;
+            font-size: 14px;
+            font-style: italic;
+        }
+        
+        .contact-info {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 12px;
+            color: #555;
+        }
+        
+        .contact-info span {
+            margin: 0 15px;
+        }
+        
+        .section {
+            margin-bottom: 25px;
+            page-break-inside: avoid;
+        }
+        
+        .section-title {
+            color: #D70000;
+            font-size: 16px;
+            font-weight: bold;
+            text-transform: uppercase;
+            border-bottom: 2px solid #D4AF37;
+            padding-bottom: 5px;
+            margin-bottom: 15px;
+            letter-spacing: 1px;
+        }
+        
+        .section-content {
+            padding-left: 15px;
+        }
+        
+        .research-area {
+            background-color: #f9f9f9;
+            padding: 8px 12px;
+            margin: 5px 0;
+            border-left: 3px solid #D4AF37;
+            font-size: 13px;
+        }
+        
+        .publication-item {
+            margin-bottom: 12px;
+            padding-left: 20px;
+            text-indent: -20px;
+            font-size: 12px;
+            text-align: justify;
+        }
+        
+        .metrics {
+            display: flex;
+            justify-content: space-around;
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #f5f5f5;
+            border-radius: 5px;
+        }
+        
+        .metric-box {
+            text-align: center;
+        }
+        
+        .metric-label {
+            font-size: 11px;
+            color: #666;
+            text-transform: uppercase;
+        }
+        
+        .metric-value {
+            font-size: 20px;
+            font-weight: bold;
+            color: #D70000;
+        }
+        
+        .external-links {
+            margin-top: 15px;
+        }
+        
+        .external-links a {
+            display: inline-block;
+            margin-right: 15px;
+            color: #0066cc;
+            text-decoration: none;
+            font-size: 12px;
+        }
+        
+        .footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #ddd;
+            text-align: center;
+            font-size: 10px;
+            color: #999;
+        }
+        
+        ul {
+            padding-left: 20px;
+        }
+        
+        li {
+            margin-bottom: 8px;
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Header Section -->
+    <div class="header">
+        <h1>{{ name }}</h1>
+        <div class="title">{{ title }}</div>
+        <div class="affiliation">{{ department }}, {{ affiliation }}</div>
+    </div>
+    
+    <!-- Contact Information -->
+    <div class="contact-info">
+        {% if email %}
+        <span>✉ {{ email }}</span>
+        {% endif %}
+        {% if phone %}
+        <span>☎ {{ phone }}</span>
+        {% endif %}
+    </div>
+    
+    <!-- Metrics Section -->
+    {% if sinta_score or google_scholar or scopus %}
+    <div class="metrics">
+        {% if sinta_score %}
+        <div class="metric-box">
+            <div class="metric-label">SINTA Score</div>
+            <div class="metric-value">{{ sinta_score }}</div>
+        </div>
+        {% endif %}
+        {% if google_scholar %}
+        <div class="metric-box">
+            <div class="metric-label">Google Scholar</div>
+            <div class="metric-value">✓</div>
+        </div>
+        {% endif %}
+        {% if scopus %}
+        <div class="metric-box">
+            <div class="metric-label">Scopus</div>
+            <div class="metric-value">✓</div>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+    
+    <!-- Research Areas -->
+    {% if research_areas %}
+    <div class="section">
+        <div class="section-title">Research Areas</div>
+        <div class="section-content">
+            {% for area in research_areas[:5] %}
+            <div class="research-area">{{ area }}</div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Education -->
+    {% if education %}
+    <div class="section">
+        <div class="section-title">Education</div>
+        <div class="section-content">
+            <ul>
+            {% for edu in education %}
+                <li>{{ edu }}</li>
+            {% endfor %}
+            </ul>
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Academic Positions -->
+    {% if positions %}
+    <div class="section">
+        <div class="section-title">Academic Positions</div>
+        <div class="section-content">
+            <ul>
+            {% for position in positions %}
+                <li>{{ position }}</li>
+            {% endfor %}
+            </ul>
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Publications -->
+    {% if publications %}
+    <div class="section">
+        <div class="section-title">Selected Publications</div>
+        <div class="section-content">
+            {% for pub in publications[:10] %}
+            <div class="publication-item">{{ loop.index }}. {{ pub }}</div>
+            {% endfor %}
+            {% if publications|length > 10 %}
+            <p style="font-style: italic; font-size: 11px; margin-top: 10px;">
+                ... and {{ publications|length - 10 }} more publications
+            </p>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Awards & Honors -->
+    {% if awards %}
+    <div class="section">
+        <div class="section-title">Awards & Honors</div>
+        <div class="section-content">
+            <ul>
+            {% for award in awards %}
+                <li>{{ award }}</li>
+            {% endfor %}
+            </ul>
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Teaching -->
+    {% if teaching %}
+    <div class="section">
+        <div class="section-title">Teaching</div>
+        <div class="section-content">
+            <ul>
+            {% for course in teaching %}
+                <li>{{ course }}</li>
+            {% endfor %}
+            </ul>
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- External Links -->
+    {% if google_scholar or scopus %}
+    <div class="section">
+        <div class="section-title">External Profiles</div>
+        <div class="section-content external-links">
+            {% if google_scholar %}
+            <a href="{{ google_scholar }}">🎓 Google Scholar Profile</a>
+            {% endif %}
+            {% if scopus %}
+            <a href="{{ scopus }}">📚 Scopus Profile</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Footer -->
+    <div class="footer">
+        <p>Curriculum Vitae generated by Check Please AI System</p>
+        <p>Generated on: {{ generated_date }}</p>
+        <p>For the most up-to-date information, please visit the official university website</p>
+    </div>
+</body>
+</html>

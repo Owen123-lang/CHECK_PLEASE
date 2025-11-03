@@ -4,6 +4,8 @@
 
 Aplikasi ini memungkinkan pengguna untuk mengajukan pertanyaan dalam bahasa alami, memberikan sumber URL tambahan, dan menerima jawaban komprehensif yang didukung oleh data dari basis pengetahuan vektor dan sumber web real-time.
 
+**🆕 NEW FEATURE: AI-Powered CV Generation** - Sistem sekarang dapat menghasilkan CV (Curriculum Vitae) profesional dalam format PDF untuk dosen/profesor berdasarkan percakapan dengan chatbot!
+
 ---
 
 ## 📋 Daftar Isi
@@ -13,8 +15,9 @@ Aplikasi ini memungkinkan pengguna untuk mengajukan pertanyaan dalam bahasa alam
 3.  [Struktur Proyek](#-struktur-proyek)
 4.  [Panduan Instalasi](#-panduan-instalasi)
 5.  [Cara Menjalankan](#-cara-menjalankan)
-6.  [Kendala & Solusi](#-kendala--solusi)
-7.  [Changelog](#-changelog)
+6.  [Fitur CV Generation](#-fitur-cv-generation)
+7.  [Kendala & Solusi](#-kendala--solusi)
+8.  [Changelog](#-changelog)
 
 ---
 
@@ -48,6 +51,7 @@ Aplikasi ini menggunakan arsitektur 3-lapis yang terdiri dari Frontend, Backend,
 |               | [LangChain](https://www.langchain.com/)                                | Orkestrasi untuk tool dan komponen AI.              |
 | **Database**  | [Astra DB](https://www.datastax.com/products/astra-db)                 | Database vektor cloud untuk pencarian RAG.          |
 | **PDF**       | [WeasyPrint](https://weasyprint.org/)                                  | Library untuk membuat laporan PDF dari HTML.        |
+|               | [Jinja2](https://palletsprojects.com/p/jinja/)                         | Template engine untuk rendering HTML.               |
 
 ---
 
@@ -173,6 +177,77 @@ npm run dev
 
 ---
 
+## 📄 Fitur CV Generation
+
+### Cara Menggunakan CV Generator
+
+1. **Melalui Chat:**
+   ```
+   User: "Generate CV for Prof. Dr. Riri Fitri Sari"
+   AI: [Mengumpulkan data dari database, SINTA, Google Scholar]
+   AI: "✅ CV data collected successfully..."
+   ```
+
+2. **Melalui API Endpoint:**
+   ```bash
+   POST /api/generate-cv
+   {
+     "professor_name": "Prof. Dr. Riri Fitri Sari",
+     "session_id": "optional-session-id"
+   }
+   ```
+
+3. **Sumber Data CV:**
+   - **Database Internal**: Profil akademik dari Astra DB
+   - **SINTA**: Score, publikasi nasional, afiliasi
+   - **Google Scholar**: Sitasi, publikasi internasional
+   - **Web Search**: Informasi tambahan dari web
+   - **Conversation Context**: Data dari percakapan sebelumnya (jika ada session_id)
+
+4. **Format CV yang Dihasilkan:**
+   - Header profesional dengan nama, gelar, afiliasi
+   - Metrics (SINTA Score, Google Scholar, Scopus)
+   - Research Areas (bidang penelitian)
+   - Education (pendidikan)
+   - Academic Positions (jabatan akademik)
+   - Selected Publications (maksimal 10 publikasi utama)
+   - Awards & Honors
+   - Teaching (mata kuliah yang diajar)
+   - External Profiles (link ke Google Scholar, Scopus, dll)
+
+### Contoh Penggunaan
+
+**Dalam Bahasa Indonesia:**
+```
+"Buatkan CV untuk Prof. Muhammad Suryanegara"
+"Generate CV Prof. Dadang Gunawan"
+"Create curriculum vitae untuk Dr. Anak Agung"
+```
+
+**Dalam Bahasa Inggris:**
+```
+"Generate CV for Prof. Dr. Riri Fitri Sari"
+"Create CV for Prof. Suryadibrata"
+"Make curriculum vitae for Dr. Muhamad Asvial"
+```
+
+### Teknologi CV Generation
+
+- **PDF Generation**: WeasyPrint (HTML to PDF)
+- **Template Engine**: Jinja2
+- **Data Parsing**: Regex + NLP untuk ekstraksi informasi
+- **Multi-Source Aggregation**: Menggabungkan data dari 4+ sumber
+- **Context-Aware**: Menggunakan riwayat percakapan untuk memperkaya data
+
+### API Response
+
+Ketika CV berhasil dibuat, API akan mengembalikan:
+- **Content-Type**: `application/pdf`
+- **Filename**: `CV_[Nama]_[Tanggal].pdf`
+- **Size**: Biasanya 100-500 KB tergantung jumlah publikasi
+
+---
+
 ## 🚨 Kendala & Solusi
 
 ### 1. ❌ Error: "OPENAI_API_KEY is required"
@@ -251,21 +326,21 @@ self.llm = LLM(
 
 ## 📝 Changelog
 
-### [November 2, 2025]
+### Version 0.4.0 (Latest)
+- ✅ **NEW**: AI-powered CV generation from chat conversations
+- ✅ **NEW**: Multi-source data aggregation (DB + SINTA + Scholar + Web)
+- ✅ **NEW**: Professional academic CV template
+- ✅ **NEW**: Session-based conversation tracking
+- ✅ **NEW**: Context-aware CV generation using chat history
+- ✅ **NEW**: `/api/generate-cv` endpoint for CV download
+- ✅ **IMPROVED**: CV Generator Tool integrated with CrewAI agent
+- ✅ **IMPROVED**: Automatic data parsing and structuring
 
-#### Changed
-- 🔄 **LLM**: Kembali dari Ollama → Gemini 1.5 Flash
-  - Alasan: Ollama llama3 tidak support function calling untuk CrewAI tools
-  - Gemini mendukung function calling dengan sempurna
-  
-#### Fixed
-- ✅ **CORS Error**: Ditambahkan `localhost:3001` ke allowed origins
-- ✅ **Tool Calling Error**: Fixed dengan menggunakan Gemini yang support function calling
-- ✅ **Error Handling**: Improved error messages di backend dan frontend
-
-#### Added
-- ✨ **Debug Logging**: Added print statements di `/api/chat` endpoint
-- 📝 **README.md**: Comprehensive documentation dengan troubleshooting
+### Version 0.3.0
+- ✅ Hybrid RAG system with intelligent routing
+- ✅ SINTA scraper integration
+- ✅ Google Scholar search integration
+- ✅ Improved web scraping with retry mechanism
 
 ---
 
@@ -275,6 +350,7 @@ self.llm = LLM(
 - **GET /** - Health check endpoint
 - **POST /api/chat** - RAG chat endpoint dengan support untuk multiple URLs
 - **POST /api/generate-pdf** - PDF generator untuk export hasil
+- **POST /api/generate-cv** - CV generator untuk dosen/profesor
 
 ### Frontend UI
 - **Landing Page**: Hero section dengan branding "Check Please"
