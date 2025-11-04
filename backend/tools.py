@@ -9,7 +9,8 @@ from crewai.tools import BaseTool
 from typing import Type
 from pydantic import BaseModel, Field
 import requests
-from bs4 import BeautifulSoup  # MOVED TO TOP LEVEL!
+from bs4 import BeautifulSoup
+import sinta  # Fixed: was 'import sinta_scraper'
 
 load_dotenv()
 
@@ -448,133 +449,550 @@ class GoogleScholarSearchTool(BaseTool):
             return f"Unexpected error: {str(e)}"
 
 
-# ========== SINTA SCRAPER TOOL ==========
+# ========== GOOGLE SCHOLAR TOOLS (SerpAPI) ==========
+
+class ScholarProfilesSearchInput(BaseModel):
+    """Input schema for Google Scholar Profiles Search Tool."""
+    query: str = Field(..., description="Search query for finding academic profiles (e.g., 'Riri Fitri Sari', 'UI Electrical Engineering professor')")
+
+
+class GoogleScholarProfilesSearchTool(BaseTool):
+    name: str = "Google Scholar Profiles Search"
+    description: str = (
+        "Search for academic profiles on Google Scholar by name, affiliation, or research area. "
+        "Use this to find professor profiles, their Google Scholar IDs, affiliations, and email addresses. "
+        "Returns a list of matching profiles with their basic information and citation counts."
+    )
+    args_schema: Type[BaseModel] = ScholarProfilesSearchInput
+
+    def _run(self, query: str) -> str:
+        """Search for Google Scholar profiles."""
+        try:
+            if not SERPAPI_KEY:
+                return "❌ Error: SERPAPI_KEY not found. Please add it to your .env file to use Google Scholar features."
+            
+            url = "https://serpapi.com/search.json"
+            params = {
+                "engine": "google_scholar_profiles",
+                "mauthors": query,
+                "api_key": SERPAPI_KEY,
+                "hl": "en"
+            }
+            
+            response = requests.get(url, params=params, timeout=30)
+            response.raise_for_status()
+            data = response.json()
+            
+            profiles = data.get("profiles", [])
+            
+            if not profiles:
+                return f"❌ No Google Scholar profiles found for '{query}'. Try different keywords or check spelling."
+            
+            output = f"🎓 **Google Scholar Profiles for: '{query}'**\n\n"
+            output += f"Found {len(profiles)} profile(s):\n\n"
+            
+            for i, profile in enumerate(profiles[:10], 1):  # Limit to 10 results
+                name = profile.get("name", "Unknown")
+                author_id = profile.get("author_id", "")
+                affiliations = profile.get("affiliations", "No affiliation listed")
+                email = profile.get("email", "No email")
+                cited_by = profile.get("cited_by", 0)
+                interests = profile.get("interests", [])
+                
+                output += f"{i}. **{name}**\n"
+                output += f"   📧 {email}\n"
+                output += f"   🏛️ {affiliations}\n"
+                output += f"   📊 Citations: {cited_by:,}\n"
+                
+                if interests:
+                    output += f"   🔬 Research: {', '.join(interests[:3])}\n"
+                
+                output += f"   🔑 Author ID: `{author_id}`\n"
+                output += f"   💡 Use 'Google Scholar Author Profile Tool' with this ID to get full details\n\n"
+            
+            return output
+            
+        except requests.exceptions.RequestException as e:
+            return f"❌ Error searching Google Scholar profiles: {str(e)}"
+        except Exception as e:
+            return f"❌ Unexpected error: {str(e)}"
+
+
+class ScholarAuthorProfileInput(BaseModel):
+    """Input schema for Google Scholar Author Profile Tool."""
+    author_id: str = Field(..., description="Google Scholar author ID (e.g., 'LSsXyncAAAAJ')")
+
+
+class GoogleScholarAuthorProfileTool(BaseTool):
+    name: str = "Google Scholar Author Profile Tool"
+    description: str = (
+        "Get complete profile details for a specific Google Scholar author using their author_id. "
+        "Returns comprehensive information including: full name, affiliation, all publications, "
+        "citation metrics (h-index, i10-index), citation graph, co-authors, and research interests. "
+        "Use this after finding an author_id from 'Google Scholar Profiles Search'."
+    )
+    args_schema: Type[BaseModel] = ScholarAuthorProfileInput
+
+    def _run(self, author_id: str) -> str:
+        """Get detailed Google Scholar author profile."""
+        try:
+            if not SERPAPI_KEY:
+                return "❌ Error: SERPAPI_KEY not found. Please add it to your .env file."
+            
+            url = "https://serpapi.com/search.json"
+            params = {
+                "engine": "google_scholar_author",
+                "author_id": author_id,
+                "api_key": SERPAPI_KEY,
+                "hl": "en",
+                "num": 100  # Get up to 100 publications
+            }
+            
+            response = requests.get(url, params=params, timeout=30)
+            response.raise_for_status()
+            data = response.json()
+            
+            # Extract author info
+            author = data.get("author", {})
+            articles = data.get("articles", [])
+            cited_by = data.get("cited_by", {})
+            co_authors = data.get("co_authors", [])
+            
+            if not author:
+                return f"❌ No profile found for author_id: {author_id}"
+            
+            # Build comprehensive output
+            output = f"👤 **Google Scholar Author Profile**\n\n"
+            output += f"**Name:** {author.get('name', 'Unknown')}\n"
+            output += f"**Affiliation:** {author.get('affiliations', 'Not listed')}\n"
+            output += f"**Email:** {author.get('email', 'Not listed')}\n"
+            
+            # Research interests
+            interests = author.get("interests", [])
+            if interests:
+                interest_names = [i.get("title") for i in interests if i.get("title")]
+                output += f"**Research Interests:** {', '.join(interest_names[:5])}\n"
+            
+            # Citation metrics
+            output += f"\n📊 **Citation Metrics:**\n"
+            table = cited_by.get("table", [])
+            for metric in table:
+                for key, value in metric.items():
+                    metric_name = key.replace('_', ' ').title()
+                    all_time = value.get("all", 0)
+                    since_2016 = value.get("since_2016", 0)
+                    output += f"   • {metric_name}: {all_time:,} (since 2016: {since_2016:,})\n"
+            
+            # Top publications
+            output += f"\n📚 **Publications (Top 10):**\n"
+            for i, article in enumerate(articles[:10], 1):
+                title = article.get("title", "No title")
+                authors = article.get("authors", "Unknown authors")
+                year = article.get("year", "N/A")
+                cited = article.get("cited_by", {}).get("value", 0)
+                
+                output += f"\n{i}. **{title}** ({year})\n"
+                output += f"   Authors: {authors[:100]}{'...' if len(authors) > 100 else ''}\n"
+                output += f"   Citations: {cited:,}\n"
+            
+            if len(articles) > 10:
+                output += f"\n   ... and {len(articles) - 10} more publications\n"
+            
+            output += f"\n**Total Publications:** {len(articles)}\n"
+            
+            # Co-authors
+            if co_authors:
+                output += f"\n👥 **Frequent Co-authors:**\n"
+                for i, coauthor in enumerate(co_authors[:5], 1):
+                    co_name = coauthor.get("name", "Unknown")
+                    co_affil = coauthor.get("affiliations", "")
+                    output += f"   {i}. {co_name} - {co_affil}\n"
+            
+            return output
+            
+        except requests.exceptions.RequestException as e:
+            return f"❌ Error fetching author profile: {str(e)}"
+        except Exception as e:
+            return f"❌ Unexpected error: {str(e)}"
+
+
+class ScholarPublicationsSearchInput(BaseModel):
+    """Input schema for Google Scholar Publications Search Tool."""
+    query: str = Field(..., description="Search query for finding academic papers (e.g., 'machine learning UI', 'wireless networks Indonesia')")
+
+
+class GoogleScholarPublicationsSearchTool(BaseTool):
+    name: str = "Google Scholar Publications Search"
+    description: str = (
+        "Search for academic papers and publications on Google Scholar. "
+        "Returns paper titles, authors, publication info, citation counts, and PDF links if available. "
+        "Use this to find research papers, verify publications, or explore research topics."
+    )
+    args_schema: Type[BaseModel] = ScholarPublicationsSearchInput
+
+    def _run(self, query: str) -> str:
+        """Search for publications on Google Scholar."""
+        try:
+            if not SERPAPI_KEY:
+                return "❌ Error: SERPAPI_KEY not found. Please add it to your .env file."
+            
+            url = "https://serpapi.com/search.json"
+            params = {
+                "engine": "google_scholar",
+                "q": query,
+                "api_key": SERPAPI_KEY,
+                "hl": "en",
+                "num": 20  # Get 20 results
+            }
+            
+            response = requests.get(url, params=params, timeout=30)
+            response.raise_for_status()
+            data = response.json()
+            
+            organic_results = data.get("organic_results", [])
+            
+            if not organic_results:
+                return f"❌ No publications found for '{query}'. Try different keywords."
+            
+            output = f"📄 **Google Scholar Publications: '{query}'**\n\n"
+            output += f"Found {len(organic_results)} result(s):\n\n"
+            
+            for i, result in enumerate(organic_results[:10], 1):
+                title = result.get("title", "No title")
+                link = result.get("link", "")
+                snippet = result.get("snippet", "")
+                
+                # Publication info
+                pub_info = result.get("publication_info", {})
+                summary = pub_info.get("summary", "")
+                
+                # Citation info
+                inline_links = result.get("inline_links", {})
+                cited_by = inline_links.get("cited_by", {})
+                citations = cited_by.get("total", 0)
+                
+                # Resources (PDF links)
+                resources = result.get("resources", [])
+                
+                output += f"{i}. **{title}**\n"
+                
+                if summary:
+                    output += f"   📝 {summary}\n"
+                
+                if snippet:
+                    snippet_short = snippet[:150] + "..." if len(snippet) > 150 else snippet
+                    output += f"   💬 {snippet_short}\n"
+                
+                if citations:
+                    output += f"   📊 Cited by: {citations:,}\n"
+                
+                if resources:
+                    pdf_links = [r.get("link") for r in resources if r.get("file_format") == "PDF"]
+                    if pdf_links:
+                        output += f"   📥 PDF: {pdf_links[0]}\n"
+                
+                if link:
+                    output += f"   🔗 {link}\n"
+                
+                output += "\n"
+            
+            return output
+            
+        except requests.exceptions.RequestException as e:
+            return f"❌ Error searching publications: {str(e)}"
+        except Exception as e:
+            return f"❌ Unexpected error: {str(e)}"
+
+
+class ScholarCitedByInput(BaseModel):
+    """Input schema for Google Scholar Cited By Tool."""
+    cluster_id: str = Field(..., description="Google Scholar cluster ID of the paper to get citations for")
+
+
+class GoogleScholarCitedByTool(BaseTool):
+    name: str = "Google Scholar Cited By Tool"
+    description: str = (
+        "Get papers that cite a specific research paper using its Google Scholar cluster_id. "
+        "Returns a list of citing papers with titles, authors, publication info, and citation counts. "
+        "Use this to analyze citation networks and see who is building on specific research. "
+        "The cluster_id can be found in the 'cited_by' link from publication search results."
+    )
+    args_schema: Type[BaseModel] = ScholarCitedByInput
+
+    def _run(self, cluster_id: str) -> str:
+        """Get papers that cite a specific work."""
+        try:
+            if not SERPAPI_KEY:
+                return "❌ Error: SERPAPI_KEY not found. Please add it to your .env file."
+            
+            url = "https://serpapi.com/search.json"
+            params = {
+                "engine": "google_scholar",
+                "cites": cluster_id,
+                "api_key": SERPAPI_KEY,
+                "hl": "en",
+                "num": 20
+            }
+            
+            response = requests.get(url, params=params, timeout=30)
+            response.raise_for_status()
+            data = response.json()
+            
+            organic_results = data.get("organic_results", [])
+            
+            if not organic_results:
+                return f"❌ No citing papers found for cluster_id: {cluster_id}"
+            
+            # Get search info
+            search_info = data.get("search_information", {})
+            total_results = search_info.get("total_results", "Unknown")
+            
+            output = f"📊 **Papers Citing This Work**\n\n"
+            output += f"**Total Citations:** {total_results}\n"
+            output += f"**Showing:** Top {len(organic_results)} papers\n\n"
+            
+            for i, result in enumerate(organic_results[:10], 1):
+                title = result.get("title", "No title")
+                link = result.get("link", "")
+                snippet = result.get("snippet", "")
+                
+                # Publication info
+                pub_info = result.get("publication_info", {})
+                summary = pub_info.get("summary", "")
+                
+                # Citation info
+                inline_links = result.get("inline_links", {})
+                cited_by = inline_links.get("cited_by", {})
+                citations = cited_by.get("total", 0)
+                
+                output += f"{i}. **{title}**\n"
+                
+                if summary:
+                    output += f"   📝 {summary}\n"
+                
+                if snippet:
+                    snippet_short = snippet[:150] + "..." if len(snippet) > 150 else snippet
+                    output += f"   💬 {snippet_short}\n"
+                
+                if citations:
+                    output += f"   📊 Cited by: {citations:,}\n"
+                
+                if link:
+                    output += f"   🔗 {link}\n"
+                
+                output += "\n"
+            
+            return output
+            
+        except requests.exceptions.RequestException as e:
+            return f"❌ Error fetching citing papers: {str(e)}"
+        except Exception as e:
+            return f"❌ Unexpected error: {str(e)}"
+
+
+# ========== SINTA SCRAPER TOOL (USING LIBRARY) ==========
 class SintaScraperInput(BaseModel):
     """Input schema for SINTA Scraper Tool."""
-    author_name: str = Field(..., description="Name of the academic/professor to search in SINTA database, e.g. 'Riri Fitri Sari'")
+    author_name: str = Field(..., description="Name of the academic/professor to search in SINTA database, e.g. 'Riri Fitri Sari' or 'Muhammad Suryanegara'")
 
 
 class SintaScraperTool(BaseTool):
-    name: str = "SINTA Scraper Tool"
+    name: str = "SINTA Academic Database Tool"
     description: str = (
-        "Scrapes academic profiles from SINTA (Science and Technology Index), "
-        "Indonesia's official academic database. SINTA profiles include: "
-        "SINTA Score, Google Scholar link, Scopus link, Web of Science link, "
-        "and publications in national journals (Garuda). "
-        "Use this tool to get comprehensive data about Indonesian academics. "
-        "Example: 'Riri Fitri Sari' or 'Muhammad Suryanegara'"
+        "Retrieves comprehensive academic profiles from SINTA (Science and Technology Index), "
+        "Indonesia's official academic database managed by Kemenristekdikti. "
+        "Returns detailed information including: "
+        "- SINTA Score (Overall & 3-Year) "
+        "- National & Institutional Rankings "
+        "- Google Scholar metrics (h-index, i10-index, citations, publications) "
+        "- Scopus metrics (documents, citations, quartile distribution) "
+        "- Web of Science metrics "
+        "- Affiliation and department "
+        "- Research areas "
+        "**IMPORTANT:** Input must be the EXACT FULL NAME as it appears in SINTA. "
+        "Use this for Indonesian academics affiliated with Indonesian universities. "
+        "Example queries: 'Riri Fitri Sari', 'Muhammad Suryanegara', 'Dadang Gunawan'"
     )
     args_schema: Type[BaseModel] = SintaScraperInput
 
     def _run(self, author_name: str) -> str:
-        """Search and scrape SINTA profile."""
+        """Search and retrieve SINTA profile using sinta-scraper library."""
         try:
-            # Step 1: Search for author in SINTA
-            search_url = "https://sinta.kemdikbud.go.id/authors"
+            # Import sinta-scraper library
+            import sinta as sinta
             
-            # Search via web scraping
-            print(f"[SINTA] Searching for: {author_name}")
+            print(f"\n[SINTA] Searching for author: '{author_name}'")
             
-            # Use requests to search
-            search_params = {
-                "q": author_name,
-                "search": "1"
-            }
+            # Step 1: Search for author by name (manual search via web)
+            # Since sinta-scraper requires SINTA ID, we need to find it first
+            search_url = f"https://sinta.kemdikbud.go.id/authors?q={author_name.replace(' ', '+')}"
             
             headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
             }
             
-            response = requests.get(search_url, params=search_params, headers=headers, timeout=10)
+            print(f"[SINTA] Searching via: {search_url}")
+            response = requests.get(search_url, headers=headers, timeout=15)
             response.raise_for_status()
             
-            # Parse search results to find profile URL
-            from bs4 import BeautifulSoup
             soup = BeautifulSoup(response.content, 'html.parser')
             
-            # Find author profile links
-            profile_links = []
+            # Extract SINTA ID from search results
+            # Look for author profile links: /authors/detail?id=XXXXXX
+            author_id = None
             for link in soup.find_all('a', href=True):
                 href = link['href']
-                if '/authors/detail' in href or '/authors/profile' in href:
-                    full_url = f"https://sinta.kemdikbud.go.id{href}" if href.startswith('/') else href
-                    profile_links.append(full_url)
+                if '/authors/detail?id=' in href or '/authors/profile?id=' in href:
+                    # Extract ID using regex
+                    import re
+                    match = re.search(r'[?&]id=(\d+)', href)
+                    if match:
+                        author_id = match.group(1)
+                        print(f"[SINTA] Found SINTA ID: {author_id}")
+                        break
             
-            if not profile_links:
-                return f"⚠️ No SINTA profile found for '{author_name}'. Try searching manually at: https://sinta.kemdikbud.go.id/authors"
+            if not author_id:
+                return (
+                    f"⚠️ Could not find SINTA profile for '{author_name}'.\n\n"
+                    f"**Troubleshooting:**\n"
+                    f"1. Check spelling - SINTA requires exact full names\n"
+                    f"2. Try variations: with/without titles (Prof., Dr.)\n"
+                    f"3. Search manually: {search_url}\n"
+                    f"4. If found, use 'Web Search Tool' or 'Dynamic Web Scraper Tool' instead\n\n"
+                    f"**Alternative:** If this is a UI (Universitas Indonesia) lecturer, "
+                    f"try searching via UI's website first."
+                )
             
-            # Take first profile link
-            profile_url = profile_links[0]
-            print(f"[SINTA] Found profile: {profile_url}")
+            # Step 2: Retrieve detailed profile using sinta-scraper library
+            print(f"[SINTA] Retrieving profile data for ID: {author_id}")
             
-            # Step 2: Scrape the profile page
-            profile_response = requests.get(profile_url, headers=headers, timeout=10)
-            profile_response.raise_for_status()
-            
-            profile_soup = BeautifulSoup(profile_response.content, 'html.parser')
-            
-            # Extract information
-            output = f"📊 SINTA Profile for: {author_name}\n"
-            output += f"🔗 Profile URL: {profile_url}\n\n"
-            
-            # Extract SINTA Score
-            sinta_score = profile_soup.find('div', class_='sinta-score')
-            if sinta_score:
-                output += f"**SINTA Score:** {sinta_score.get_text(strip=True)}\n\n"
-            
-            # Extract affiliation
-            affiliation = profile_soup.find('div', class_='affiliation')
-            if affiliation:
-                output += f"**Affiliation:** {affiliation.get_text(strip=True)}\n\n"
-            
-            # Extract external profile links
-            output += "**External Profiles:**\n"
-            
-            # Google Scholar
-            scholar_link = profile_soup.find('a', href=lambda x: x and 'scholar.google' in x)
-            if scholar_link:
-                output += f"- 🎓 Google Scholar: {scholar_link['href']}\n"
-            
-            # Scopus
-            scopus_link = profile_soup.find('a', href=lambda x: x and 'scopus.com' in x)
-            if scopus_link:
-                output += f"- 📚 Scopus: {scopus_link['href']}\n"
-            
-            # Web of Science
-            wos_link = profile_soup.find('a', href=lambda x: x and 'webofscience.com' in x)
-            if wos_link:
-                output += f"- 🔬 Web of Science: {wos_link['href']}\n"
-            
-            # Garuda (Garba Rujukan Digital)
-            garuda_link = profile_soup.find('a', href=lambda x: x and 'garuda' in x)
-            if garuda_link:
-                output += f"- 📖 Garuda: {garuda_link['href']}\n"
-            
-            output += "\n**Publication Statistics:**\n"
-            
-            # Extract publication counts
-            pub_stats = profile_soup.find_all('div', class_='stat-card')
-            for stat in pub_stats:
-                label = stat.find('div', class_='stat-label')
-                value = stat.find('div', class_='stat-value')
-                if label and value:
-                    output += f"- {label.get_text(strip=True)}: {value.get_text(strip=True)}\n"
-            
-            # If no structured stats found, try to get general text
-            if not pub_stats:
-                # Get all text from profile for context
-                profile_text = profile_soup.get_text(separator='\n', strip=True)
-                # Extract first 500 characters as summary
-                output += f"\n**Profile Summary:**\n{profile_text[:500]}...\n"
-            
-            output += f"\n💡 Visit SINTA profile for complete details: {profile_url}"
-            
-            return output
+            try:
+                # Get author data in JSON format
+                author_data = sinta.author(author_id, output_format='dictionary')
+                
+                # Format the output in a readable way
+                output = f"📊 **SINTA PROFILE - {author_data.get('name', 'N/A')}**\n"
+                output += f"{'='*60}\n\n"
+                
+                # Profile URL
+                output += f"🔗 **Profile URL:** {author_data.get('url', 'N/A')}\n\n"
+                
+                # Affiliation
+                affil = author_data.get('affiliation', {})
+                output += f"🏛️ **Affiliation:** {affil.get('name', 'N/A')}\n"
+                if author_data.get('department'):
+                    output += f"📚 **Department:** {author_data.get('department')}\n"
+                output += "\n"
+                
+                # Research Areas
+                areas = author_data.get('areas', [])
+                if areas:
+                    output += f"🔬 **Research Areas:** {', '.join(areas)}\n\n"
+                
+                # SINTA Score
+                score = author_data.get('score', {})
+                output += "**SINTA SCORE:**\n"
+                output += f"  • Overall: {score.get('overall', 'N/A')}\n"
+                output += f"  • 3-Year: {score.get('3_years', 'N/A')}\n"
+                output += f"  • Overall V2: {score.get('overall_v2', 'N/A')}\n"
+                output += f"  • 3-Year V2: {score.get('3_years_v2', 'N/A')}\n\n"
+                
+                # Rankings
+                rank = author_data.get('rank', {})
+                output += "**RANKINGS:**\n"
+                output += f"  • National: #{rank.get('national', 'N/A')}\n"
+                output += f"  • 3-Year National: #{rank.get('3_years_national', 'N/A')}\n"
+                output += f"  • Affiliation: #{rank.get('affiliation', 'N/A')}\n"
+                output += f"  • 3-Year Affiliation: #{rank.get('3_years_affiliation', 'N/A')}\n\n"
+                
+                # Google Scholar Metrics
+                scholar = author_data.get('scholar', {})
+                output += "**GOOGLE SCHOLAR METRICS:**\n"
+                output += f"  • Documents: {scholar.get('documents', 'N/A')}\n"
+                output += f"  • Citations: {scholar.get('citations', 'N/A')}\n"
+                output += f"  • h-index: {scholar.get('h-index', 'N/A')}\n"
+                output += f"  • i10-index: {scholar.get('i10-index', 'N/A')}\n\n"
+                
+                # Scopus Metrics
+                scopus = author_data.get('scopus', {})
+                output += "**SCOPUS METRICS:**\n"
+                output += f"  • Documents: {scopus.get('documents', 'N/A')}\n"
+                output += f"  • Citations: {scopus.get('citations', 'N/A')}\n"
+                output += f"  • h-index: {scopus.get('h-index', 'N/A')}\n"
+                output += f"  • Articles: {scopus.get('articles', 'N/A')}\n"
+                output += f"  • Conferences: {scopus.get('conferences', 'N/A')}\n"
+                output += f"  • Q1 Journals: {scopus.get('Q1', 0)}\n"
+                output += f"  • Q2 Journals: {scopus.get('Q2', 0)}\n"
+                output += f"  • Q3 Journals: {scopus.get('Q3', 0)}\n"
+                output += f"  • Q4 Journals: {scopus.get('Q4', 0)}\n\n"
+                
+                # Web of Science Metrics
+                wos = author_data.get('wos', {})
+                if wos.get('documents', 0) > 0:
+                    output += "**WEB OF SCIENCE METRICS:**\n"
+                    output += f"  • Documents: {wos.get('documents', 'N/A')}\n"
+                    output += f"  • Citations: {wos.get('citations', 'N/A')}\n\n"
+                
+                # Books and IPR
+                output += "**OTHER CONTRIBUTIONS:**\n"
+                output += f"  • Books: {author_data.get('books', 0)}\n"
+                output += f"  • IPR (Patents/Copyrights): {author_data.get('ipr', 0)}\n\n"
+                
+                # SINTA Journal Categories
+                sinta_journals = author_data.get('sinta', {})
+                if sinta_journals:
+                    output += "**SINTA JOURNAL PUBLICATIONS:**\n"
+                    for category, count in sinta_journals.items():
+                        if count > 0:
+                            output += f"  • {category}: {count}\n"
+                    output += "\n"
+                
+                output += f"{'='*60}\n"
+                output += f"✅ Data retrieved from SINTA (sinta.kemdikbud.go.id)\n"
+                output += f"🔗 View full profile: {author_data.get('url', 'N/A')}\n"
+                
+                return output
+                
+            except Exception as lib_error:
+                print(f"[SINTA] Library error: {lib_error}")
+                # Fallback to basic profile URL if library fails
+                profile_url = f"https://sinta.kemdikbud.go.id/authors/detail?id={author_id}"
+                return (
+                    f"⚠️ Found SINTA profile but couldn't retrieve detailed data.\n\n"
+                    f"**Profile URL:** {profile_url}\n\n"
+                    f"**Next Steps:**\n"
+                    f"1. Visit the profile URL above for full details\n"
+                    f"2. Use 'Dynamic Web Scraper Tool' with URL: {profile_url}\n\n"
+                    f"**Error details:** {str(lib_error)}"
+                )
             
         except requests.exceptions.RequestException as e:
-            return f"Error accessing SINTA: {str(e)}\nTry searching manually at: https://sinta.kemdikbud.go.id/authors?q={author_name.replace(' ', '+')}"
+            return (
+                f"❌ Network error accessing SINTA: {str(e)}\n\n"
+                f"**Troubleshooting:**\n"
+                f"1. Check your internet connection\n"
+                f"2. SINTA website might be down or slow\n"
+                f"3. Try again in a few moments\n"
+                f"4. Search manually: https://sinta.kemdikbud.go.id/authors?q={author_name.replace(' ', '+')}"
+            )
+        except ImportError:
+            return (
+                f"❌ ERROR: 'sinta-scraper' library not installed!\n\n"
+                f"**To fix this:**\n"
+                f"1. Stop the backend server\n"
+                f"2. Run: pip install sinta-scraper\n"
+                f"3. Restart the backend server\n\n"
+                f"**Temporary workaround:** Use 'Web Search Tool' to search for '{author_name} SINTA'"
+            )
         except Exception as e:
-            return f"Error scraping SINTA profile: {str(e)}"
+            return (
+                f"❌ Unexpected error: {str(e)}\n\n"
+                f"**Alternative search methods:**\n"
+                f"1. Use 'Web Search Tool' with query: '{author_name} SINTA profile'\n"
+                f"2. Search manually: https://sinta.kemdikbud.go.id/authors?q={author_name.replace(' ', '+')}\n"
+                f"3. Try 'Academic Search Tool' or 'Dynamic Web Scraper Tool'\n\n"
+                f"**Debug info:** {type(e).__name__} - {str(e)}"
+            )
 
 
 # ========== CV GENERATOR TOOL ==========
@@ -673,5 +1091,9 @@ web_search_tool = TavilySearchTool()
 academic_search_tool = AcademicSearchTool()
 dynamic_web_scraper_tool = DynamicWebScraperTool()
 google_scholar_tool = GoogleScholarSearchTool()
+google_scholar_profiles_tool = GoogleScholarProfilesSearchTool()  # New Google Scholar Profiles Search Tool
+google_scholar_author_tool = GoogleScholarAuthorProfileTool()  # New Google Scholar Author Profile Tool
+google_scholar_publications_tool = GoogleScholarPublicationsSearchTool()  # New Google Scholar Publications Search Tool
+google_scholar_cited_by_tool = GoogleScholarCitedByTool()  # New Google Scholar Cited By Tool
 sinta_scraper_tool = SintaScraperTool()  # New SINTA tool
 cv_generator_tool = CVGeneratorTool()  # New CV Generator tool

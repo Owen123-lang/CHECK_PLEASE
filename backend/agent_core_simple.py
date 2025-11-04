@@ -1,7 +1,17 @@
 import os
 from dotenv import load_dotenv
 from crewai import LLM
-from tools import academic_search_tool, dynamic_web_scraper_tool, google_scholar_tool, sinta_scraper_tool
+from tools import (
+    academic_search_tool, 
+    dynamic_web_scraper_tool, 
+    google_scholar_tool,
+    google_scholar_profiles_tool,
+    google_scholar_author_tool,
+    google_scholar_publications_tool,
+    google_scholar_cited_by_tool,
+    sinta_scraper_tool,
+    web_search_tool
+)
 import re
 
 load_dotenv()
@@ -21,25 +31,42 @@ class SimpleRAG:
             max_tokens=4000,
         )
     
-    def query(self, user_query: str, user_urls: list[str] = None) -> str:
+    def query(self, user_query: str, user_urls: list[str] = None, conversation_history: list[dict] = None) -> str:
         """
         Main RAG query method with GUARANTEED steps:
         1. ALWAYS check database first
         2. If insufficient, scrape UI website
         3. Format with LLM
+        
+        Args:
+            user_query: The current user query
+            user_urls: Optional list of URLs to scrape
+            conversation_history: List of previous messages [{"user": "...", "assistant": "..."}]
         """
         print("\n" + "="*60)
         print(f"[SIMPLE RAG] Processing query: {user_query}")
+        if conversation_history:
+            print(f"[SIMPLE RAG] Using conversation history: {len(conversation_history)} messages")
         print("="*60)
         
         all_context = []
+        
+        # Add conversation context to help resolve pronouns
+        context_summary = ""
+        if conversation_history and len(conversation_history) > 0:
+            context_summary = self._build_context_summary(conversation_history)
+            print(f"[CONTEXT] Previous conversation about: {context_summary}")
         
         # ============================================
         # STEP 1: ALWAYS CHECK DATABASE FIRST
         # ============================================
         print("\n[STEP 1/4] Checking database...")
         try:
-            db_result = academic_search_tool._run(user_query)
+            # Enhance query with context if needed
+            enhanced_query = self._enhance_query_with_context(user_query, context_summary)
+            print(f"  → Enhanced query: {enhanced_query}")
+            
+            db_result = academic_search_tool._run(enhanced_query)
             
             # Validate database result
             if self._is_valid_data(db_result):
@@ -101,12 +128,53 @@ class SimpleRAG:
         
         # Generate response
         try:
-            response = self._generate_response(user_query, combined_context, intent)
+            response = self._generate_response(user_query, combined_context, intent, conversation_history)
             print("  ✓ Response generated successfully!")
             return response
         except Exception as e:
             print(f"  ✗ LLM error: {e}")
             return self._emergency_response(user_query)
+    
+    def _build_context_summary(self, conversation_history: list[dict]) -> str:
+        """Extract key entities (names) from conversation history."""
+        context = ""
+        
+        # Get the last few messages
+        recent_messages = conversation_history[-3:] if len(conversation_history) > 3 else conversation_history
+        
+        for msg in recent_messages:
+            user_msg = msg.get("user", "")
+            assistant_msg = msg.get("assistant", "")
+            
+            # Extract names (capitalize words, likely names)
+            import re
+            names = re.findall(r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*', user_msg + " " + assistant_msg)
+            
+            # Filter academic titles
+            academic_names = [n for n in names if not n in ["Database", "Website", "Info", "Research"]]
+            
+            if academic_names:
+                context = ", ".join(set(academic_names))
+        
+        return context
+    
+    def _enhance_query_with_context(self, query: str, context_summary: str) -> str:
+        """
+        Enhance query with context to resolve pronouns.
+        Example: "what are his research?" + context "Alfan Praseka" -> "Alfan Praseka research"
+        """
+        query_lower = query.lower()
+        
+        # Check if query contains pronouns
+        pronouns = ["his", "her", "their", "he", "she", "they", "him"]
+        has_pronoun = any(pronoun in query_lower.split() for pronoun in pronouns)
+        
+        if has_pronoun and context_summary:
+            # Replace pronoun with context
+            print(f"  → Detected pronoun in query, adding context: {context_summary}")
+            return f"{context_summary} {query}"
+        
+        return query
     
     def _is_valid_data(self, data: str) -> bool:
         """Check if data is valid (not error pages or garbage)."""
@@ -144,8 +212,16 @@ class SimpleRAG:
         else:
             return 'general'
     
-    def _generate_response(self, query: str, context: str, intent: str) -> str:
-        """Generate natural response using LLM."""
+    def _generate_response(self, query: str, context: str, intent: str, conversation_history: list[dict] = None) -> str:
+        """Generate natural response using LLM with conversation awareness."""
+        
+        # Build conversation context string
+        conversation_context = ""
+        if conversation_history:
+            conversation_context = "\n\nPrevious Conversation:\n"
+            for msg in conversation_history[-3:]:  # Last 3 messages
+                conversation_context += f"User: {msg.get('user', '')}\n"
+                conversation_context += f"Assistant: {msg.get('assistant', '')[:200]}...\n\n"
         
         if intent == 'list':
             instruction = """Extract and list all professors and lecturers mentioned.
@@ -163,19 +239,38 @@ Format:
 ONLY list names and titles. NO links, NO extra details."""
         
         elif intent == 'full_profile':
-            instruction = """Extract complete profile with all available information.
-Include: name, title, position, research areas, SINTA score, publications, etc.
-Format professionally in markdown."""
+            instruction = """Extract complete ACADEMIC and PROFESSIONAL profile ONLY.
+
+**INCLUDE:**
+- Academic degrees (S1, S2, S3, PhD)
+- Professional positions (Professor, Lecturer, Chairperson)
+- Research areas and interests
+- Publications and citations
+- SINTA score, Scopus ID, Google Scholar
+- Academic awards and recognitions
+- Professional affiliations
+
+**NEVER INCLUDE:**
+- Birth date, age, personal life
+- Family members, spouse, children
+- Hobbies or personal interests
+
+Format professionally in markdown. Skip any personal information completely."""
         
         elif intent == 'research':
             instruction = """Focus on research activities, publications, and citations.
-Present in structured format with key achievements."""
+Present in structured format with key achievements.
+ONLY academic and professional information."""
         
         else:
             instruction = """Provide a clear, concise answer to the query.
-Format professionally and naturally."""
+Format professionally and naturally.
+ONLY include academic and professional information.
+NEVER include personal life details (family, birth date, etc.)."""
         
-        prompt = f"""You are an academic information assistant.
+        prompt = f"""You are an academic information assistant with conversation memory.
+
+{conversation_context}
 
 User Query: "{query}"
 
@@ -186,17 +281,49 @@ Instructions:
 {instruction}
 
 IMPORTANT:
-- Extract ONLY factual information from the context
+- If the user uses pronouns like "his", "her", "their", refer to the person mentioned in the previous conversation
+- Extract ONLY factual ACADEMIC and PROFESSIONAL information from the context
+- NEVER include personal information: birth date, family, spouse, children, personal life
 - Ignore navigation menus, error messages, and irrelevant text
 - If asking for a list, ONLY provide names and titles
-- If asking for details, include all relevant information
+- If asking for details, include all relevant ACADEMIC information
 - Be natural and conversational
 - Use proper markdown formatting
+- MAINTAIN CONTEXT: If the previous query was about a specific person and the current query uses "his/her", refer to that same person
 
 Answer:"""
         
         response = self.llm.call([{"role": "user", "content": prompt}])
-        return response
+        
+        # Filter out personal information
+        filtered_response = self._filter_personal_info(str(response))
+        
+        return filtered_response
+    
+    def _filter_personal_info(self, text: str) -> str:
+        """Remove any personal information from the response."""
+        # Keywords to detect personal info lines
+        personal_keywords = [
+            'born on', 'lahir', 'birth', 'tanggal lahir',
+            'married', 'menikah', 'istri', 'suami', 'wife', 'husband', 'spouse',
+            'children', 'anak', 'son', 'daughter', 'putra', 'putri',
+            'family', 'keluarga', 'personal life', 'kehidupan pribadi',
+            'hobbies', 'hobby', 'hobi', 'born in', 'age'
+        ]
+        
+        lines = text.split('\n')
+        filtered_lines = []
+        
+        for line in lines:
+            line_lower = line.lower()
+            
+            # Check if line contains personal info
+            has_personal = any(keyword in line_lower for keyword in personal_keywords)
+            
+            if not has_personal:
+                filtered_lines.append(line)
+        
+        return '\n'.join(filtered_lines)
     
     def _emergency_response(self, query: str) -> str:
         """Emergency response when everything fails."""

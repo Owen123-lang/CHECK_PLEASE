@@ -151,6 +151,12 @@ async def handle_chat_query(request: QueryRequest):
         print(f"[API] Session ID: {session_id}")
         print(f"[API] Received query: {request.message}")
         print(f"[API] User URLs: {request.user_urls}")
+        
+        # Get conversation history for context
+        conversation_history = conversation_sessions.get(session_id, [])
+        if conversation_history:
+            print(f"[API] Using {len(conversation_history)} previous messages for context")
+        
         print(f"{'='*60}")
         
         if not request.user_urls and is_chitchat(request.message):
@@ -164,9 +170,10 @@ async def handle_chat_query(request: QueryRequest):
             print("[API]   2. Decide which tools to use (SINTA/Scholar/WebScraper)")
             print("[API]   3. Cross-validate data from multiple sources")
             print("[API]   4. Synthesize comprehensive answer")
+            print("[API]   5. Use conversation context to resolve pronouns (his/her/their)")
             print(f"{'='*60}\n")
             
-            result = run_agentic_rag_crew(request.message, request.user_urls)
+            result = run_agentic_rag_crew(request.message, request.user_urls, conversation_history)
             
             print(f"\n{'='*60}")
             print(f"[API] Agent completed! Response length: {len(str(result))} chars")

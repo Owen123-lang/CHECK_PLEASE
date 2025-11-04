@@ -27,26 +27,184 @@ class HybridRAG:
             max_tokens=2000,
         )
     
-    def query(self, user_query: str, user_urls: list = None) -> str:
-        """Main entry point with intelligent routing."""
-        print("\n" + "="*70)
-        print("🎯 HYBRID RAG SYSTEM")
-        print("="*70)
-        print(f"Query: {user_query}")
+    def query(self, user_query: str, user_urls: list = None, conversation_history: list = None) -> str:
+        """
+        Process a user query using the Hybrid RAG system.
         
-        # Check if user wants to generate CV
-        if self._is_cv_request(user_query):
-            print("[ROUTING] CV GENERATION REQUEST → CV Tool")
-            return self._handle_cv_request(user_query)
+        Args:
+            user_query: The user's question
+            user_urls: Optional URLs to scrape for additional context
+            conversation_history: Previous conversation for context
         
-        is_simple = self._is_simple_list_query(user_query)
+        Returns:
+            AI-generated response
+        """
+        try:
+            print("\n" + "=" * 70)
+            print("🚀 HYBRID RAG QUERY PROCESSING")
+            print("=" * 70)
+            print(f"📝 Query: {user_query}")
+            
+            # NEW: Resolve pronouns using conversation history
+            if conversation_history:
+                resolved_query = self._resolve_pronouns_in_query(user_query, conversation_history)
+                print(f"🔍 Resolved Query: {resolved_query}")
+                # Use resolved query for processing
+                processing_query = resolved_query
+            else:
+                processing_query = user_query
+            
+            # Format conversation context for the agent
+            conversation_context = self._format_conversation_history(conversation_history) if conversation_history else ""
+            
+            # STEP 1: Vector Search (Astra DB)
+            print("\n[STEP 1/4] 🔎 Vector Search (Astra DB)...")
+            vector_results = self._vector_search(processing_query)
+            
+            # STEP 2: Conditional Web Scraping
+            print("\n[STEP 2/4] 🌐 Web Scraping...")
+            scraped_data = ""
+            if user_urls:
+                scraped_data = self._scrape_urls(user_urls)
+            
+            # STEP 3: Construct Context for Agents
+            print("\n[STEP 3/4] 📦 Building Context...")
+            context = self._build_context(
+                vector_results=vector_results,
+                scraped_data=scraped_data,
+                conversation_context=conversation_context
+            )
+            
+            # STEP 4: Run CrewAI Agents
+            print("\n[STEP 4/4] 🤖 Running AI Agents...")
+            final_output = self._run_crew(
+                query=processing_query,  # Use resolved query
+                original_query=user_query,  # Keep original for reference
+                context=context,
+                conversation_history=conversation_history
+            )
+            
+            # Post-processing
+            print("\n[POST-PROCESSING] 🧹 Cleaning output...")
+            final_output = self._filter_personal_info(final_output)
+            final_output = self._safety_check(final_output)
+            
+            print("\n" + "=" * 70)
+            print("✅ QUERY PROCESSING COMPLETE")
+            print("=" * 70)
+            
+            return final_output
+            
+        except Exception as e:
+            print(f"\n❌ ERROR in query processing: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return self._emergency_fallback(user_query)
+    
+    def _format_conversation_history(self, history: list) -> str:
+        """Format conversation history into a readable context string."""
+        if not history or len(history) == 0:
+            return ""
         
-        if is_simple:
-            print("[ROUTING] SIMPLE LIST → Direct Execution (NO CrewAI)")
-            return self._direct_simple_list(user_query)
+        context_parts = ["PREVIOUS CONVERSATION:"]
+        for msg in history[-6:]:  # Only use last 6 messages (3 exchanges) to avoid context overflow
+            # Handle both formats: {"role": "user", "content": "..."} OR {"user": "...", "assistant": "..."}
+            if "user" in msg and "assistant" in msg:
+                # Format from main.py storage
+                context_parts.append(f"User: {msg['user']}")
+                context_parts.append(f"Assistant: {msg['assistant'][:500]}")  # Truncate long responses
+            elif "role" in msg and "content" in msg:
+                # Standard format
+                role = "User" if msg["role"] == "user" else "Assistant"
+                content = msg["content"]
+                context_parts.append(f"{role}: {content}")
+        
+        context_parts.append("\n**IMPORTANT:** When the user says 'his/her/their', they are referring to the person mentioned in the previous conversation above.")
+        return '\n'.join(context_parts)
+    
+    def _resolve_pronouns_in_query(self, query: str, conversation_history: list = None) -> str:
+        """
+        ✨ NEW FEATURE: Automatically resolve pronouns (his/her/their/him) to actual names from conversation history.
+        This makes the chatbot behave like ChatGPT/Gemini!
+        
+        Example:
+        User: "who is alfan prasekal"
+        Bot: "Alfan Prasekal is an inventor..."
+        User: "can you find more about him"  ← This function will convert to "can you find more about Alfan Prasekal"
+        """
+        if not conversation_history or len(conversation_history) == 0:
+            return query
+        
+        query_lower = query.lower()
+        
+        # Detect if query uses pronouns
+        pronouns = ['his', 'her', 'their', 'him', 'them', 'he', 'she', 'they',
+                   'nya', 'dia', 'beliau', 'tersebut']  # English + Indonesian
+        
+        has_pronoun = any(pronoun in query_lower.split() for pronoun in pronouns)
+        
+        if not has_pronoun:
+            return query  # No pronoun, return as-is
+        
+        # Extract names from recent conversation history
+        extracted_names = []
+        
+        for msg in reversed(conversation_history[-4:]):  # Check last 4 messages (2 exchanges)
+            # Get user query and assistant response
+            user_msg = msg.get('user', '') if 'user' in msg else msg.get('content', '')
+            assistant_msg = msg.get('assistant', '') if 'assistant' in msg else ''
+            
+            # Look for names in BOTH user query and assistant response
+            combined_text = f"{user_msg} {assistant_msg}"
+            
+            # Pattern 1: "who is [Name]" or "siapa itu [Name]"
+            patterns = [
+                r'who is ([A-Z][a-z]+(?: [A-Z][a-z]+)*)',
+                r'siapa itu ([A-Z][a-z]+(?: [A-Z][a-z]+)*)',
+                r'about ([A-Z][a-z]+(?: [A-Z][a-z]+)*)',
+                r'tentang ([A-Z][a-z]+(?: [A-Z][a-z]+)*)',
+                # Pattern 2: Names with titles
+                r'((?:Prof\.?|Dr\.?|Ir\.?)\s+[A-Z][a-z]+(?: [A-Z][a-z]+)+)',
+                # Pattern 3: Simple capitalized names (2-4 words)
+                r'\b([A-Z][a-z]+ [A-Z][a-z]+(?:\s+[A-Z][a-z]+)?(?:\s+[A-Z][a-z]+)?)\b',
+            ]
+            
+            for pattern in patterns:
+                matches = re.findall(pattern, combined_text)
+                for match in matches:
+                    name = match.strip()
+                    # Validate it's a real name (not common words)
+                    if len(name) > 3 and name not in ['About', 'More About', 'Information']:
+                        extracted_names.append(name)
+        
+        if not extracted_names:
+            print("[CONTEXT] No names found in history, keeping query as-is")
+            return query
+        
+        # Use the most recent name found
+        target_name = extracted_names[0]
+        
+        print(f"[CONTEXT] Detected pronoun reference to: '{target_name}'")
+        
+        # Replace pronouns with the actual name
+        # Strategy: Intelligently inject the name into the query
+        
+        if any(phrase in query_lower for phrase in ['about him', 'about her', 'about them']):
+            resolved_query = re.sub(r'about (him|her|them)', f'about {target_name}', query, flags=re.IGNORECASE)
+        elif any(phrase in query_lower for phrase in ['find more about', 'more about', 'tell me about']):
+            # Already has "about" - just replace pronoun
+            resolved_query = query
+            for pronoun in ['him', 'her', 'them', 'his', 'their']:
+                resolved_query = re.sub(r'\b' + pronoun + r'\b', target_name, resolved_query, flags=re.IGNORECASE)
+        elif 'his research' in query_lower or 'her research' in query_lower:
+            resolved_query = re.sub(r'(his|her) research', f'{target_name}\'s research', query, flags=re.IGNORECASE)
+        elif 'his publication' in query_lower or 'her publication' in query_lower:
+            resolved_query = re.sub(r'(his|her) publication', f'{target_name}\'s publications', query, flags=re.IGNORECASE)
         else:
-            print("[ROUTING] COMPLEX QUERY → CrewAI Agent")
-            return self._crewai_complex_query(user_query, user_urls)
+            # Generic replacement: Add name to the query
+            resolved_query = f"{query} (referring to {target_name})"
+        
+        return resolved_query
     
     def _is_cv_request(self, query: str) -> bool:
         """Detect if user is requesting CV generation."""
@@ -61,7 +219,6 @@ class HybridRAG:
     def _handle_cv_request(self, query: str) -> str:
         """Handle CV generation request by extracting professor name."""
         # Extract professor name from query
-        # Simple extraction: look for name after "for" or "untuk"
         query_lower = query.lower()
         
         name = None
@@ -71,7 +228,6 @@ class HybridRAG:
             name = query.split(' untuk ', 1)[1].strip()
         else:
             # Try to find name pattern (Prof., Dr., etc.)
-            import re
             name_pattern = r'((?:Prof\.?\s*)?(?:Dr\.?\s*)?(?:Ir\.?\s*)?[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)'
             match = re.search(name_pattern, query)
             if match:
@@ -94,199 +250,7 @@ Then I'll gather all available information and prepare the CV for download."""
             return result
         except Exception as e:
             print(f"[CV_HANDLER ERROR] {e}")
-            return f"❌ Error generating CV: {str(e)}\n\nPlease try again or contact support."
-    
-    def _is_simple_list_query(self, query: str) -> bool:
-        """Detect if query is just asking for a simple list."""
-        query_lower = query.lower()
-        
-        simple_keywords = [
-            'list', 'daftar', 'siapa saja', 'give me a list',
-            'nama-nama', 'names of', 'who are the'
-        ]
-        
-        complex_keywords = [
-            'profil lengkap', 'complete profile', 'detail',
-            'penelitian', 'research', 'publikasi', 'citation',
-            'compare', 'bandingkan', 'verify', 'validasi'
-        ]
-        
-        has_simple = any(kw in query_lower for kw in simple_keywords)
-        has_complex = any(kw in query_lower for kw in complex_keywords)
-        
-        return has_simple and not has_complex
-    
-    def _direct_simple_list(self, query: str) -> str:
-        """DIRECT execution for simple list queries. Bypasses CrewAI completely."""
-        print("\n[DIRECT MODE] Step-by-step execution:")
-        
-        # Step 1: Check database
-        print("[1/3] Checking database...")
-        try:
-            db_result = academic_search_tool._run(query)
-            print(f"  ✓ Database returned {len(db_result)} characters")
-            print(f"  [DEBUG] Database preview: {db_result[:300]}...")  # DEBUG
-        except Exception as e:
-            print(f"  ✗ Database error: {e}")
-            db_result = ""
-        
-        # Step 2: Scrape UI website
-        print("[2/3] Scraping UI website...")
-        try:
-            web_result = dynamic_web_scraper_tool._run("https://ee.ui.ac.id/staff-pengajar/")
-            print(f"  ✓ Website returned {len(web_result)} characters")
-            print(f"  [DEBUG] Website preview: {web_result[:300]}...")  # DEBUG
-        except Exception as e:
-            print(f"  ✗ Website error: {e}")
-            web_result = ""
-        
-        # Combine context - INCREASED from 2000 to 3000
-        combined_context = f"Database:\n{db_result[:3000]}\n\nWebsite:\n{web_result[:3000]}"
-        
-        print(f"  [DEBUG] Combined context length: {len(combined_context)} characters")  # DEBUG
-        
-        # Detect language preference
-        query_lower = query.lower()
-        use_indonesian = any(kw in query_lower for kw in ['daftar', 'siapa saja', 'berikan', 'tolong', 'bisa'])
-        
-        # Step 3: LLM extraction with IMPROVED instructions
-        print(f"[3/3] Extracting names with LLM (Language: {'Indonesian' if use_indonesian else 'English'})...")
-        
-        if use_indonesian:
-            extraction_prompt = f"""Ekstrak SEMUA nama dosen dan profesor dari data ini.
-
-Permintaan user: "{query}"
-
-Data yang tersedia:
-{combined_context}
-
-**ATURAN PENTING:**
-1. Ekstrak SEMUA nama dosen/profesor yang ditemukan (Prof., Dr., Ir., dll.)
-2. ABAIKAN: Menu navigasi ("Program Studi", "Laboratorium", "Riset", dll.)
-3. TIDAK BOLEH ADA DUPLIKAT - setiap nama hanya muncul SEKALI
-4. Kelompokkan berdasarkan jabatan:
-   - Profesor (Prof. Dr. / Prof. Ir. / Prof.)
-   - Lektor Kepala / Doktor (Dr. / Ir.)
-   - Dosen (yang tidak punya gelar Prof/Dr)
-5. Format: Numbering (1., 2., 3., ...) untuk mudah dibaca
-6. WAJIB: Extract minimal 20 nama! Jika tidak ada 20 nama, extract semua yang tersedia.
-
-**FORMAT OUTPUT (SIMPLE & CLEAN - NO EMOJI!):**
-
-DAFTAR DOSEN DEPARTEMEN TEKNIK ELEKTRO UI
-
-PROFESOR:
-1. Prof. Dr. Ir. [Nama Lengkap dengan gelar]
-2. Prof. Dr. [Nama Lengkap dengan gelar]
-3. Prof. Ir. [Nama Lengkap dengan gelar]
-(dan seterusnya...)
-
-LEKTOR KEPALA & DOKTOR:
-1. Dr. Eng. [Nama Lengkap dengan gelar]
-2. Dr. Ir. [Nama Lengkap dengan gelar]
-3. Dr. [Nama Lengkap dengan gelar]
-(dan seterusnya...)
-
-DOSEN:
-1. [Nama Lengkap dengan gelar], ST., MT.
-2. [Nama Lengkap dengan gelar], M.Eng.
-(dan seterusnya...)
-
-STATISTIK:
-- Profesor: X orang
-- Lektor Kepala & Doktor: Y orang
-- Dosen: Z orang
-- TOTAL: XYZ orang
-
-Catatan:
-Data diambil dari database akademik UI dan website resmi Departemen Teknik Elektro.
-Untuk informasi lebih lanjut, kunjungi: https://ee.ui.ac.id/staff-pengajar/
-
-PENTING: 
-- JANGAN gunakan emoji, symbol, atau formatting berlebihan!
-- Format SIMPLE dan CLEAN
-- Gunakan numbering (1., 2., 3., ...) untuk daftar nama
-- Jangan return "Tidak ada nama" jika data tersedia!
-
-Ekstrak sekarang dengan format SIMPLE dan CLEAN:"""
-        else:
-            extraction_prompt = f"""Extract ALL professors and lecturers from this data.
-
-User request: "{query}"
-
-Available data:
-{combined_context}
-
-**CRITICAL RULES:**
-1. Extract ALL faculty names found (Prof., Dr., Ir., etc.)
-2. IGNORE: Navigation menus ("Program Studi", "Laboratorium", "Riset", etc.)
-3. NO DUPLICATES - each name should appear ONLY ONCE
-4. Group by rank:
-   - Professors (Prof. Dr. / Prof. Ir. / Prof.)
-   - Associate Professors / Doctorate (Dr. / Ir.)
-   - Lecturers (those without Prof/Dr titles)
-5. Format: Numbering (1., 2., 3., ...) for easy reading
-6. MANDATORY: Extract at least 20 names! If less than 20, extract all available.
-
-**OUTPUT FORMAT (SIMPLE & CLEAN - NO EMOJI!):**
-
-FACULTY LIST - ELECTRICAL ENGINEERING DEPARTMENT UI
-
-PROFESSORS:
-1. Prof. Dr. Ir. [Full Name with titles]
-2. Prof. Dr. [Full Name with titles]
-3. Prof. Ir. [Full Name with titles]
-(continue...)
-
-ASSOCIATE PROFESSORS & DOCTORATE:
-1. Dr. Eng. [Full Name with titles]
-2. Dr. Ir. [Full Name with titles]
-3. Dr. [Full Name with titles]
-(continue...)
-
-LECTURERS:
-1. [Full Name with titles], ST., MT.
-2. [Full Name with titles], M.Eng.
-(continue...)
-
-STATISTICS:
-- Professors: X people
-- Associate Professors & Doctorate: Y people
-- Lecturers: Z people
-- TOTAL: XYZ people
-
-Note:
-Data sourced from UI academic database and official Electrical Engineering Department website.
-For more information, visit: https://ee.ui.ac.id/staff-pengajar/
-
-IMPORTANT:
-- DO NOT use emojis, symbols, or excessive formatting!
-- Keep it SIMPLE and CLEAN
-- Use numbering (1., 2., 3., ...) for name lists
-- Don't return "No names found" if data is available!
-
-Extract now with SIMPLE and CLEAN format:"""
-        
-        try:
-            raw_output = self.llm.call([{"role": "user", "content": extraction_prompt}])
-            
-            print(f"  [DEBUG] LLM raw output length: {len(str(raw_output))} characters")  # DEBUG
-            print(f"  [DEBUG] LLM output preview: {str(raw_output)[:500]}...")  # DEBUG
-            
-            # LESS AGGRESSIVE deduplication (only for exact duplicates)
-            cleaned_output = self._deduplicate_names_gentle(raw_output)
-            
-            # Length safety check
-            if len(cleaned_output) > 5000:
-                print("  ⚠️ Output too long, truncating...")
-                cleaned_output = cleaned_output[:5000] + "\n\n[Output truncated for safety]"
-            
-            print(f"  ✓ Final output: {len(cleaned_output)} characters")
-            return cleaned_output
-            
-        except Exception as e:
-            print(f"  ✗ LLM error: {e}")
-            return self._emergency_fallback(query)
+            return f"❌ Error generating CV: {str(e)}"
     
     def _deduplicate_names_gentle(self, text: str) -> str:
         """Gently remove EXACT duplicate lines only (less aggressive)."""
@@ -332,20 +296,23 @@ Extract now with SIMPLE and CLEAN format:"""
         
         return '\n'.join(deduplicated_lines)
     
-    def _crewai_complex_query(self, query: str, user_urls: list = None) -> str:
+    def _crewai_complex_query(self, query: str, user_urls: list = None, history_context: str = "") -> str:
         """Use CrewAI for complex queries that need multi-step reasoning."""
         print("\n[CREWAI MODE] Initializing agent...")
         
         try:
             agent = Agent(
                 role='Academic Information Specialist',
-                goal='Provide accurate academic information',
+                goal='Provide accurate PROFESSIONAL and ACADEMIC information ONLY',
                 backstory=(
-                    "You are a focused research assistant.\n"
+                    "You are a focused research assistant specializing in ACADEMIC and PROFESSIONAL information.\n"
                     "1. Check database first\n"
                     "2. Use SINTA/Scholar for enrichment if needed\n"
                     "3. Keep responses concise (max 500 words)\n"
                     "4. NO REPETITION - each fact should appear ONCE\n"
+                    "5. NEVER include personal information (family, birth date, spouse, children, personal life)\n"
+                    "6. ONLY include: academic credentials, professional positions, research, publications, awards\n"
+                    "7. IMPORTANT: Pay attention to conversation history to understand pronouns like 'his/her/their'\n"
                 ),
                 tools=[
                     academic_search_tool,
@@ -360,17 +327,36 @@ Extract now with SIMPLE and CLEAN format:"""
                 max_iter=3,
             )
             
+            # Add conversation history to task description if available
+            context_prefix = f"{history_context}\n\n" if history_context else ""
+            
             task = Task(
-                description=f"""Answer: "{query}"
+                description=f"""{context_prefix}Answer: "{query}"
 
 **STRICT RULES:**
 1. Check database FIRST
 2. Maximum 500 words output
 3. NO REPETITION of information
 4. If query is about specific person, use SINTA/Scholar for validation
+5. **IMPORTANT: If conversation history is provided above, use it to understand who the user is asking about**
+   - When user says "his/her/their", refer to the person mentioned in previous messages
+   - Maintain context from previous conversation
+6. **CRITICAL: ONLY include ACADEMIC and PROFESSIONAL information:**
+   - ✅ Academic degrees (S1, S2, S3, PhD, etc.)
+   - ✅ Professional positions (Professor, Lecturer, Chairperson, etc.)
+   - ✅ Research areas and interests
+   - ✅ Publications and citations
+   - ✅ Academic awards and recognitions
+   - ✅ SINTA score, Scopus profile, Google Scholar
+   - ✅ Professional affiliations
+   
+   - ❌ NEVER include: Birth date, family members, spouse, children, personal life, hobbies
+   - ❌ NEVER include: "Born on", "married to", "has X children", "personal information"
 
-Answer concisely:""",
-                expected_output="Concise, non-repetitive answer (max 500 words)",
+If the data contains personal information, SKIP IT COMPLETELY.
+
+Answer concisely with ONLY academic and professional information:""",
+                expected_output="Concise academic/professional profile (max 500 words) - NO personal information",
                 agent=agent
             )
             
@@ -391,8 +377,9 @@ Answer concisely:""",
             else:
                 output = str(result)
             
-            # Safety checks
+            # Safety checks + personal info filter
             output = self._safety_check(output)
+            output = self._filter_personal_info(output)
             
             return output
             
@@ -400,44 +387,228 @@ Answer concisely:""",
             print(f"[ERROR] CrewAI failed: {e}")
             return self._emergency_fallback(query)
     
-    def _safety_check(self, output: str) -> str:
-        """Check for infinite loops and duplicates."""
-        lines = output.split('\n')
-        line_counts = {}
+    def _filter_personal_info(self, text: str) -> str:
+        """Remove any personal information that slipped through."""
+        print("[FILTER] Checking for personal information...")
+        
+        # STRICT keywords that DEFINITELY indicate personal info (not academic)
+        # IMPORTANT: These must appear WITH context, not standalone
+        personal_keywords = [
+            ('born on', 'tanggal lahir'),  # Birth date with specific date
+            ('married to', 'menikah dengan'),  # Marriage info
+            ('has children', 'memiliki anak'),  # Children info
+            ('family member', 'anggota keluarga'),  # Family references
+            ('personal life', 'kehidupan pribadi'),  # Personal life
+            ('spouse', 'pasangan'),  # Spouse info
+            ('wife', 'istri'),  # Wife
+            ('husband', 'suami'),  # Husband
+            ('daughter', 'putri'),  # Daughter
+            ('son', 'putra'),  # Son
+        ]
+        
+        lines = text.split('\n')
+        filtered_lines = []
         
         for line in lines:
-            clean_line = line.strip()
-            if len(clean_line) > 20:
-                line_counts[clean_line] = line_counts.get(clean_line, 0) + 1
+            line_lower = line.lower()
+            
+            # Check if line contains personal info keywords
+            is_personal = any(
+                any(kw in line_lower for kw in keyword_pair)
+                for keyword_pair in personal_keywords
+            )
+            
+            if not is_personal:
+                filtered_lines.append(line)
+            else:
+                print(f"  [REMOVED] Personal info: {line[:80]}...")
         
-        max_repeats = max(line_counts.values()) if line_counts else 0
+        result = '\n'.join(filtered_lines)
+        print(f"  ✓ Personal info filter complete")
+        return result
+    
+    def _safety_check(self, output: str) -> str:
+        """Final safety checks and formatting."""
+        if len(output) > 8000:
+            print("  ⚠️ Output too long, truncating...")
+            output = output[:8000] + "\n\n[Output truncated for safety]"
         
-        if max_repeats > 3:
-            print(f"[SAFETY] Detected infinite loop! (max repeats: {max_repeats})")
-            print("[SAFETY] Triggering emergency fallback...")
-            return "[SYSTEM ERROR: Agent entered infinite loop. Using fallback...]\n\n" + self._emergency_fallback("list professors")
+        # Remove excessive repetition (same sentence appearing 3+ times)
+        lines = output.split('\n')
+        seen_count = {}
+        deduplicated = []
         
-        if len(output) > 10000:
-            print("[SAFETY] Output too long, truncating...")
-            output = output[:10000] + "\n\n[Output truncated for safety]"
+        for line in lines:
+            clean = line.strip()
+            if clean:
+                seen_count[clean] = seen_count.get(clean, 0) + 1
+                if seen_count[clean] <= 2:  # Allow up to 2 occurrences
+                    deduplicated.append(line)
         
-        return output
+        return '\n'.join(deduplicated)
     
     def _emergency_fallback(self, query: str) -> str:
-        """Emergency response when everything fails."""
-        return f"""# Dosen Departemen Teknik Elektro UI
+        """Emergency fallback if everything fails."""
+        return f"""⚠️ I encountered an error while processing your request.
 
-Mohon maaf, sistem mengalami kesulitan teknis.
+**Your query:** "{query}"
 
-**Silakan kunjungi:**
-- Website Resmi: https://ee.ui.ac.id/staff-pengajar/
-- SINTA UI: https://sinta.kemdikbud.go.id/affiliations/detail?id=147
+**Possible solutions:**
+1. Try rephrasing your question more specifically
+2. Ask about a specific person or topic
+3. Check if the information exists in our database
 
-**Atau coba query yang lebih spesifik:**
-- "Prof. Riri Fitri Sari"
-- "daftar 10 profesor di Teknik Elektro UI"
+**What I can help with:**
+- Academic profiles of UI Electrical Engineering faculty
+- Research information from SINTA/Google Scholar
+- Generate CV for specific professors
+- List faculty members
 
-Maaf atas ketidaknyamanannya."""
+Please try again with a more specific question!"""
+
+    def _vector_search(self, query: str) -> str:
+        """Search the Astra DB vector database for relevant academic information."""
+        try:
+            from tools import academic_search_tool
+            result = academic_search_tool._run(query)
+            print(f"  ✓ Vector search returned {len(result)} characters")
+            return result
+        except Exception as e:
+            print(f"  ✗ Vector search failed: {e}")
+            return ""
+    
+    def _scrape_urls(self, urls: list) -> str:
+        """Scrape content from provided URLs."""
+        try:
+            from tools import dynamic_web_scraper_tool
+            scraped_content = []
+            for url in urls:
+                try:
+                    content = dynamic_web_scraper_tool._run(url)
+                    scraped_content.append(f"From {url}:\n{content}\n")
+                    print(f"  ✓ Scraped {url}")
+                except Exception as e:
+                    print(f"  ✗ Failed to scrape {url}: {e}")
+            
+            result = "\n".join(scraped_content)
+            print(f"  ✓ Scraped {len(urls)} URLs, {len(result)} characters total")
+            return result
+        except Exception as e:
+            print(f"  ✗ URL scraping failed: {e}")
+            return ""
+    
+    def _build_context(self, vector_results: str, scraped_data: str, conversation_context: str) -> str:
+        """Build context from all available sources."""
+        context_parts = []
+        
+        if conversation_context:
+            context_parts.append(f"=== CONVERSATION CONTEXT ===\n{conversation_context}\n")
+        
+        if vector_results:
+            context_parts.append(f"=== DATABASE RESULTS ===\n{vector_results}\n")
+        
+        if scraped_data:
+            context_parts.append(f"=== SCRAPED WEB DATA ===\n{scraped_data}\n")
+        
+        context = "\n".join(context_parts)
+        print(f"  ✓ Built context: {len(context)} characters")
+        return context
+    
+    def _run_crew(self, query: str, original_query: str, context: str, conversation_history: list = None) -> str:
+        """Run the CrewAI agents to process the query."""
+        try:
+            # Format conversation context if available
+            history_context = self._format_conversation_history(conversation_history) if conversation_history else ""
+            
+            # Create the agent
+            agent = Agent(
+                role='Academic Information Specialist',
+                goal='Provide accurate PROFESSIONAL and ACADEMIC information ONLY',
+                backstory=(
+                    "You are a focused research assistant specializing in ACADEMIC and PROFESSIONAL information.\n"
+                    "1. Check database first\n"
+                    "2. Use SINTA/Scholar for enrichment if needed\n"
+                    "3. Keep responses concise (max 500 words)\n"
+                    "4. NO REPETITION - each fact should appear ONCE\n"
+                    "5. NEVER include personal information (family, birth date, spouse, children, personal life)\n"
+                    "6. ONLY include: academic credentials, professional positions, research, publications, awards\n"
+                    "7. IMPORTANT: Pay attention to conversation history to understand pronouns like 'his/her/their'\n"
+                ),
+                tools=[
+                    academic_search_tool,
+                    sinta_scraper_tool,
+                    google_scholar_tool,
+                    dynamic_web_scraper_tool,
+                    cv_generator_tool,
+                ],
+                llm=self.llm,
+                verbose=True,
+                allow_delegation=False,
+                max_iter=3,
+            )
+            
+            # Build task description with context
+            context_prefix = ""
+            if history_context:
+                context_prefix += f"{history_context}\n\n"
+            if context:
+                context_prefix += f"AVAILABLE CONTEXT:\n{context}\n\n"
+            
+            task = Task(
+                description=f"""{context_prefix}Answer: "{query}"
+
+**STRICT RULES:**
+1. Use the provided context from database/web searches
+2. Maximum 500 words output
+3. NO REPETITION of information
+4. If query is about specific person, use SINTA/Scholar for validation
+5. **IMPORTANT: If conversation history is provided above, use it to understand who the user is asking about**
+   - When user says "his/her/their", refer to the person mentioned in previous messages
+   - Maintain context from previous conversation
+6. **CRITICAL: ONLY include ACADEMIC and PROFESSIONAL information:**
+   - ✅ Academic degrees (S1, S2, S3, PhD, etc.)
+   - ✅ Professional positions (Professor, Lecturer, Chairperson, etc.)
+   - ✅ Research areas and interests
+   - ✅ Publications and citations
+   - ✅ Academic awards and recognitions
+   - ✅ SINTA score, Scopus profile, Google Scholar
+   - ✅ Professional affiliations
+   
+   - ❌ NEVER include: Birth date, family members, spouse, children, personal life, hobbies
+   - ❌ NEVER include: "Born on", "married to", "has X children", "personal information"
+
+If the data contains personal information, SKIP IT COMPLETELY.
+
+Answer concisely with ONLY academic and professional information:""",
+                expected_output="Concise academic/professional profile (max 500 words) - NO personal information",
+                agent=agent
+            )
+            
+            crew = Crew(
+                agents=[agent],
+                tasks=[task],
+                process=Process.sequential,
+                verbose=True,
+            )
+            
+            result = crew.kickoff()
+            
+            # Extract result
+            if hasattr(result, 'raw'):
+                output = str(result.raw)
+            elif hasattr(result, 'output'):
+                output = str(result.output)
+            else:
+                output = str(result)
+            
+            print(f"  ✓ CrewAI completed, output: {len(output)} characters")
+            return output
+            
+        except Exception as e:
+            print(f"  ✗ CrewAI execution failed: {e}")
+            import traceback
+            traceback.print_exc()
+            return self._emergency_fallback(query)
 
 # Singleton
 _rag = None
@@ -448,22 +619,17 @@ def get_rag():
         _rag = HybridRAG()
     return _rag
 
-def run_agentic_rag_crew(query: str, user_urls: list[str] | None = None):
-    """Main entry point - HYBRID system with intelligent routing."""
-    try:
-        rag = get_rag()
-        return rag.query(query, user_urls)
-    except Exception as e:
-        print(f"[CRITICAL] System failure: {e}")
-        import traceback
-        traceback.print_exc()
-        
-        return f"""# System Error
-
-Error: {str(e)}
-
-**Sumber Manual:**
-- https://ee.ui.ac.id/staff-pengajar/
-- https://sinta.kemdikbud.go.id
-
-Silakan coba lagi."""
+def run_agentic_rag_crew(user_query: str, user_urls: list = None, conversation_history: list = None) -> str:
+    """
+    Main entry point for the Hybrid RAG system.
+    
+    Args:
+        user_query: The user's question
+        user_urls: Optional list of URLs to scrape
+        conversation_history: Previous conversation messages for context
+    
+    Returns:
+        AI-generated response
+    """
+    hybrid_rag = HybridRAG()
+    return hybrid_rag.query(user_query, user_urls, conversation_history)
