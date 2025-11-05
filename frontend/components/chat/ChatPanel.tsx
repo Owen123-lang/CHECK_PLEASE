@@ -131,7 +131,11 @@ export default function ChatPanel({ onSessionUpdate, onMessageUpdate }: ChatPane
                   ? 'bg-brand-red text-white' 
                   : 'bg-gray-800 text-gray-200'
               }`}>
-                {m.content}
+                {m.role === 'assistant' ? (
+                  <div dangerouslySetInnerHTML={{ __html: m.content }} />
+                ) : (
+                  m.content
+                )}
               </div>
             </div>
           ))

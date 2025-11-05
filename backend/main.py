@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -11,6 +11,11 @@ from dotenv import load_dotenv
 from pdf_generator import create_cv_pdf  # Import CV generator
 from datetime import datetime
 import uuid
+from typing import Optional, List
+import PyPDF2
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from astrapy import DataAPIClient
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
 load_dotenv()
 
@@ -19,6 +24,17 @@ app = FastAPI(
     description="API for Intelligent Agentic RAG with CrewAI + AI-Powered CV Generation",
     version="0.5.0"  # Version bump for AI CV feature
 )
+
+# --- Pydantic Models ---
+class QueryRequest(BaseModel):
+    message: str
+    user_urls: Optional[List[str]] = None
+    session_id: Optional[str] = None
+
+class CVGenerationRequest(BaseModel):
+    professor_name: str
+    session_id: Optional[str] = None
+    use_crewai: bool = True
 
 # --- Konfigurasi CORS (DIPERBAIKI) ---
 origins = [
@@ -46,18 +62,73 @@ simple_llm = LLM(
 # Session storage for conversation history (in-memory, will reset on server restart)
 conversation_sessions = {}
 
-# --- Model Data Pydantic ---
-class QueryRequest(BaseModel):
-    message: str
-    user_urls: list[str] | None = None
-    session_id: str | None = None
-
-class CVGenerationRequest(BaseModel):
-    professor_name: str
-    session_id: str | None = None
-    use_crewai: bool = True  # New flag to enable/disable CrewAI agents
-
 # --- Helper Functions ---
+
+def format_response_for_frontend(text: str) -> str:
+    """
+    Convert markdown-formatted response to clean HTML for better frontend display.
+    Removes markdown syntax and applies proper HTML formatting.
+    """
+    import re
+    
+    # Remove excessive markdown symbols
+    formatted = text
+    
+    # Convert headers
+    formatted = re.sub(r'^# (.+)$', r'<h1 class="text-2xl font-bold text-gray-900 mb-4">\1</h1>', formatted, flags=re.MULTILINE)
+    formatted = re.sub(r'^## (.+)$', r'<h2 class="text-xl font-semibold text-red-700 mt-6 mb-3">\1</h2>', formatted, flags=re.MULTILINE)
+    formatted = re.sub(r'^### (.+)$', r'<h3 class="text-lg font-medium text-gray-800 mt-4 mb-2">\1</h3>', formatted, flags=re.MULTILINE)
+    
+    # Convert bold text
+    formatted = re.sub(r'\*\*(.+?)\*\*', r'<strong class="font-semibold text-gray-900">\1</strong>', formatted)
+    
+    # Convert bullet points
+    formatted = re.sub(r'^- (.+)$', r'<li class="ml-4 mb-2">\1</li>', formatted, flags=re.MULTILINE)
+    
+    # Convert numbered lists (preserve numbers)
+    formatted = re.sub(r'^(\d+)\. (.+)$', r'<li class="ml-4 mb-3" value="\1">\2</li>', formatted, flags=re.MULTILINE)
+    
+    # Convert emoji icons to styled spans
+    formatted = re.sub(r'📚', '<span class="text-blue-600">📚</span>', formatted)
+    formatted = re.sub(r'📊', '<span class="text-green-600">📊</span>', formatted)
+    formatted = re.sub(r'🔗', '<span class="text-indigo-600">🔗</span>', formatted)
+    formatted = re.sub(r'👥', '<span class="text-purple-600">👥</span>', formatted)
+    
+    # Wrap consecutive <li> tags in <ul> or <ol>
+    # Find numbered list items
+    formatted = re.sub(r'(<li class="ml-4 mb-3" value="\d+">.+?</li>(?:\s*<li class="ml-4 mb-3" value="\d+">.+?</li>)*)', 
+                      r'<ol class="list-decimal list-inside space-y-2 mb-4">\1</ol>', formatted, flags=re.DOTALL)
+    
+    # Find bullet list items
+    formatted = re.sub(r'(<li class="ml-4 mb-2">.+?</li>(?:\s*<li class="ml-4 mb-2">.+?</li>)*)', 
+                      r'<ul class="list-disc list-inside space-y-1 mb-4">\1</ul>', formatted, flags=re.DOTALL)
+    
+    # Convert horizontal rules
+    formatted = re.sub(r'^---+$', '<hr class="my-6 border-t-2 border-gray-300" />', formatted, flags=re.MULTILINE)
+    
+    # Wrap paragraphs (text without HTML tags)
+    lines = formatted.split('\n')
+    result_lines = []
+    
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        
+        # Check if line is already wrapped in HTML tag
+        if line.startswith('<'):
+            result_lines.append(line)
+        else:
+            # It's a plain text paragraph
+            result_lines.append(f'<p class="mb-3 text-gray-700 leading-relaxed">{line}</p>')
+    
+    formatted = '\n'.join(result_lines)
+    
+    # Wrap entire response in a container div
+    formatted = f'<div class="formatted-response prose max-w-none">{formatted}</div>'
+    
+    return formatted
+
 def is_chitchat(query: str) -> bool:
     """
     Determine if a query is simple chitchat or requires RAG.
@@ -181,8 +252,11 @@ async def handle_chat_query(request: QueryRequest):
         
         store_conversation(session_id, request.message, str(result))
         
+        # Format response untuk frontend (convert markdown to HTML)
+        formatted_result = format_response_for_frontend(str(result))
+        
         return {
-            "response": str(result),
+            "response": formatted_result,
             "session_id": session_id
         }
         
@@ -334,6 +408,146 @@ async def generate_pdf(request: QueryRequest):
             content={
                 "error": str(e),
                 "message": "PDF generation failed. Please try again."
+            }
+        )
+
+@app.post("/api/upload-pdf")
+async def upload_pdf(file: UploadFile = File(...), session_id: str = None):
+    """
+    Upload and process a PDF file. Extracts text, chunks it, and stores in vector database.
+    
+    This allows users to upload their own PDF documents and ask questions about them.
+    The AI will use the User PDF Search Tool to answer questions based on uploaded content.
+    """
+    try:
+        print(f"\n{'='*60}")
+        print(f"[PDF UPLOAD] Processing file: {file.filename}")
+        print(f"[PDF UPLOAD] Content type: {file.content_type}")
+        print(f"[PDF UPLOAD] Session ID: {session_id}")
+        print(f"{'='*60}")
+        
+        # Validate file type
+        if not file.filename.endswith('.pdf'):
+            return JSONResponse(
+                status_code=400,
+                content={"error": "Only PDF files are allowed"}
+            )
+        
+        # Read PDF content
+        pdf_bytes = await file.read()
+        print(f"[PDF UPLOAD] File size: {len(pdf_bytes)} bytes")
+        
+        # Extract text from PDF
+        print("[PDF UPLOAD] Extracting text from PDF...")
+        pdf_reader = PyPDF2.PdfReader(io.BytesIO(pdf_bytes))
+        num_pages = len(pdf_reader.pages)
+        print(f"[PDF UPLOAD] PDF has {num_pages} pages")
+        
+        extracted_text = []
+        for page_num, page in enumerate(pdf_reader.pages, 1):
+            text = page.extract_text()
+            if text.strip():
+                extracted_text.append({
+                    'page': page_num,
+                    'text': text
+                })
+                print(f"[PDF UPLOAD]   Page {page_num}: {len(text)} characters")
+        
+        if not extracted_text:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "Could not extract text from PDF. The PDF might be image-based or encrypted."}
+            )
+        
+        total_chars = sum(len(item['text']) for item in extracted_text)
+        print(f"[PDF UPLOAD] Total extracted: {total_chars} characters from {len(extracted_text)} pages")
+        
+        # Chunk the text for better search
+        print("[PDF UPLOAD] Chunking text...")
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=1000,
+            chunk_overlap=200,
+            separators=["\n\n", "\n", ". ", " ", ""]
+        )
+        
+        chunks = []
+        for item in extracted_text:
+            page_chunks = text_splitter.split_text(item['text'])
+            for chunk_text in page_chunks:
+                chunks.append({
+                    'text': chunk_text,
+                    'page': item['page'],
+                    'pdf_name': file.filename
+                })
+        
+        print(f"[PDF UPLOAD] Created {len(chunks)} chunks")
+        
+        # Initialize embedding model
+        print("[PDF UPLOAD] Generating embeddings...")
+        embeddings = GoogleGenerativeAIEmbeddings(
+            model="models/embedding-001",
+            google_api_key=os.getenv("GEMINI_API_KEY")
+        )
+        
+        # Connect to Astra DB
+        client = DataAPIClient(os.getenv("ASTRA_DB_APPLICATION_TOKEN"))
+        db = client.get_database_by_api_endpoint(os.getenv("ASTRA_DB_API_ENDPOINT"))
+        collection = db.get_collection(os.getenv("ASTRA_DB_COLLECTION", "academic_profiles_ui"))
+        
+        # Store chunks in database with embeddings
+        print("[PDF UPLOAD] Storing in vector database...")
+        stored_count = 0
+        
+        for i, chunk in enumerate(chunks):
+            try:
+                # Generate embedding for this chunk
+                embedding = embeddings.embed_query(chunk['text'])
+                
+                # Create document
+                doc = {
+                    "_id": f"{session_id or 'default'}_{file.filename}_{i}",
+                    "text": chunk['text'],
+                    "page_number": chunk['page'],
+                    "pdf_name": chunk['pdf_name'],
+                    "source_type": "user_pdf",
+                    "session_id": session_id,
+                    "uploaded_at": datetime.now().isoformat(),
+                    "$vector": embedding
+                }
+                
+                # Insert into database
+                collection.insert_one(doc)
+                stored_count += 1
+                
+                if (i + 1) % 10 == 0:
+                    print(f"[PDF UPLOAD]   Stored {i + 1}/{len(chunks)} chunks...")
+                    
+            except Exception as e:
+                print(f"[PDF UPLOAD] Error storing chunk {i}: {e}")
+                continue
+        
+        print(f"[PDF UPLOAD] ✅ Successfully stored {stored_count}/{len(chunks)} chunks")
+        print(f"{'='*60}\n")
+        
+        return {
+            "success": True,
+            "filename": file.filename,
+            "pages": num_pages,
+            "chunks_stored": stored_count,
+            "total_characters": total_chars,
+            "message": f"PDF '{file.filename}' uploaded successfully! You can now ask questions about it.",
+            "session_id": session_id
+        }
+        
+    except Exception as e:
+        print(f"\n[ERROR] PDF Upload failed: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": str(e),
+                "message": "Failed to process PDF. Please try again with a different file."
             }
         )
 

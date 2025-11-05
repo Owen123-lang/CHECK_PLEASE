@@ -14,3 +14,5 @@ requests
 litellm
 langchain-google-vertexai
 sinta-scraper
+PyPDF2
+python-multipart

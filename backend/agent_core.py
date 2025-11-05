@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
 from crewai import Agent, Task, Crew, Process, LLM
-from tools import academic_search_tool, dynamic_web_scraper_tool, google_scholar_tool, sinta_scraper_tool, cv_generator_tool
+from tools import academic_search_tool, dynamic_web_scraper_tool, google_scholar_tool, sinta_scraper_tool, cv_generator_tool, ui_scholar_search_tool, pdf_search_tool
 import re
 from collections import OrderedDict
 
@@ -320,6 +320,8 @@ Then I'll gather all available information and prepare the CV for download."""
                     google_scholar_tool,
                     dynamic_web_scraper_tool,
                     cv_generator_tool,
+                    ui_scholar_search_tool,
+                    pdf_search_tool,
                 ],
                 llm=self.llm,
                 verbose=True,
@@ -520,6 +522,18 @@ Please try again with a more specific question!"""
             # Format conversation context if available
             history_context = self._format_conversation_history(conversation_history) if conversation_history else ""
             
+            # Detect if query is asking for publications list
+            is_publication_query = any(keyword in query.lower() for keyword in [
+                'publications', 'publikasi', 'research', 'penelitian', 'papers', 'karya', 'list of', 'daftar'
+            ])
+            
+            # NEW: Detect if query is asking about uploaded PDF
+            is_pdf_query = any(keyword in query.lower() for keyword in [
+                'pdf', 'dokumen', 'document', 'file', 'upload', 'yang saya kasih', 'yang saya berikan',
+                'dari pdf', 'isi pdf', 'rangkum', 'summarize', 'jelasin', 'explain',
+                'apa isi', 'what is in', 'contents of'
+            ])
+            
             # Create the agent
             agent = Agent(
                 role='Academic Information Specialist',
@@ -533,13 +547,17 @@ Please try again with a more specific question!"""
                     "5. NEVER include personal information (family, birth date, spouse, children, personal life)\n"
                     "6. ONLY include: academic credentials, professional positions, research, publications, awards\n"
                     "7. IMPORTANT: Pay attention to conversation history to understand pronouns like 'his/her/their'\n"
+                    "8. CRITICAL: When asked for publications, extract ALL publications mentioned in the context data\n"
+                    "9. **NEW: When user asks about PDF/document they uploaded, use 'User PDF Search Tool' to find information**\n"
                 ),
                 tools=[
+                    pdf_search_tool,  # Put PDF tool FIRST for priority
                     academic_search_tool,
                     sinta_scraper_tool,
                     google_scholar_tool,
                     dynamic_web_scraper_tool,
                     cv_generator_tool,
+                    ui_scholar_search_tool,
                 ],
                 llm=self.llm,
                 verbose=True,
@@ -552,20 +570,124 @@ Please try again with a more specific question!"""
             if history_context:
                 context_prefix += f"{history_context}\n\n"
             if context:
-                context_prefix += f"AVAILABLE CONTEXT:\n{context}\n\n"
+                # Clean context - remove copyright notices and navigation
+                cleaned_context = self._clean_context_for_publications(context)
+                context_prefix += f"AVAILABLE CONTEXT:\n{cleaned_context}\n\n"
             
-            task = Task(
-                description=f"""{context_prefix}Answer: "{query}"
+            # Build task description based on query type
+            if is_pdf_query:
+                task_description = f"""{context_prefix}Answer: "{query}"
+
+**🔴 SPECIAL INSTRUCTIONS FOR PDF/DOCUMENT QUERIES:**
+
+The user is asking about a PDF document they uploaded. You MUST:
+
+1. **USE 'User PDF Search Tool' FIRST** - This is MANDATORY for PDF questions
+2. Search for relevant information within the uploaded PDF
+3. Provide a comprehensive summary or answer based on the PDF content
+4. Include specific details, quotes, or sections from the PDF
+5. If asked to "rangkum" (summarize), provide a structured summary with:
+   - Main topics/themes
+   - Key points from each section
+   - Important findings or conclusions
+   - Specific examples or data mentioned
+
+**FORMATTING FOR PDF SUMMARIES:**
+
+# Ringkasan Dokumen PDF
+
+## 📄 Topik Utama
+[List main topics found in the PDF]
+
+## 🔑 Poin-Poin Penting
+1. **[Topic 1]**: [Summary]
+2. **[Topic 2]**: [Summary]
+3. **[Topic 3]**: [Summary]
+
+## 📊 Detail dan Contoh
+[Include specific examples, data, or quotes from the PDF]
+
+## 💡 Kesimpulan
+[Overall conclusion or key takeaways]
+
+---
+**Sumber:** Dokumen PDF yang Anda upload
+
+**CRITICAL RULES:**
+- MUST use 'User PDF Search Tool' - don't try to answer without it
+- Provide detailed information from the PDF
+- Use Indonesian if user asked in Indonesian
+- Quote specific sections when relevant
+- If PDF not found, tell user to upload it first
+
+Generate the response now using the PDF Search Tool:"""
+            elif is_publication_query:
+                task_description = f"""{context_prefix}Answer: "{query}"
+
+**SPECIAL INSTRUCTIONS FOR PUBLICATION QUERIES:**
+
+1. **EXTRACT ALL PUBLICATIONS** from the context data provided above
+2. Look for ALL paper titles, DOIs, journal names, conference names, and years
+3. **DO NOT LIMIT** to only 2-3 publications - include EVERYTHING you find
+4. Format each publication with:
+   - Paper title (in bold)
+   - Authors (if available)
+   - Journal/Conference name
+   - Year
+   - DOI or link (if available)
+   - Citations count (if available)
+
+**FORMATTING TEMPLATE:**
+Use this exact format:
+
+# Research Publications by [Name] (2020-2025)
+
+## 📚 Published Works
+
+### 2025
+1. **[Full Paper Title]**
+   - Authors: [Author list]
+   - Published in: [Journal/Conference Name]
+   - DOI: [DOI if available]
+   - Citations: [Number if available]
+
+2. **[Full Paper Title]**
+   - Authors: [Author list]
+   - Published in: [Journal/Conference Name]
+   - DOI: [DOI if available]
+
+### 2024
+[Continue with same format]
+
+### 2023
+[Continue with same format]
+
+---
+**Total Publications Found:** [Count]
+**Data Source:** Database + Google Scholar + SINTA
+
+**CRITICAL RULES:**
+- Extract EVERY publication mentioned in the context (aim for 10-20+ publications)
+- Use the exact formatting template above
+- Group by year (descending: 2025, 2024, 2023, etc.)
+- Include full paper titles (do not truncate)
+- If context mentions publications but lacks details, still list the title
+- NO PERSONAL INFORMATION (birth date, family, etc.)
+
+Generate the complete publication list now:"""
+            else:
+                task_description = f"""{context_prefix}Answer: "{query}"
 
 **STRICT RULES:**
 1. Use the provided context from database/web searches
-2. Maximum 500 words output
-3. NO REPETITION of information
-4. If query is about specific person, use SINTA/Scholar for validation
-5. **IMPORTANT: If conversation history is provided above, use it to understand who the user is asking about**
+2. If user mentions PDF/document, use 'User PDF Search Tool'
+3. Maximum 500 words output
+4. NO REPETITION of information
+5. If query is about specific person, use SINTA/Scholar for validation
+6. **IMPORTANT: If conversation history is provided above, use it to understand who the user is asking about**
    - When user says "his/her/their", refer to the person mentioned in previous messages
    - Maintain context from previous conversation
-6. **CRITICAL: ONLY include ACADEMIC and PROFESSIONAL information:**
+7. **CRITICAL: ONLY include ACADEMIC and PROFESSIONAL information:**
    - ✅ Academic degrees (S1, S2, S3, PhD, etc.)
    - ✅ Professional positions (Professor, Lecturer, Chairperson, etc.)
    - ✅ Research areas and interests
@@ -579,8 +701,11 @@ Please try again with a more specific question!"""
 
 If the data contains personal information, SKIP IT COMPLETELY.
 
-Answer concisely with ONLY academic and professional information:""",
-                expected_output="Concise academic/professional profile (max 500 words) - NO personal information",
+Answer concisely with ONLY academic and professional information:"""
+            
+            task = Task(
+                description=task_description,
+                expected_output="Comprehensive answer with ALL relevant information extracted from context - NO personal information",
                 agent=agent
             )
             
@@ -609,6 +734,31 @@ Answer concisely with ONLY academic and professional information:""",
             import traceback
             traceback.print_exc()
             return self._emergency_fallback(query)
+    
+    def _clean_context_for_publications(self, context: str) -> str:
+        """Clean context to focus on publication data."""
+        # Remove common noise patterns
+        noise_patterns = [
+            r'Powered by Pure, Scopus.*?Contact us',
+            r'All rights are reserved.*?Contact us',
+            r'Copyright © 2\d{3}.*?cookies',
+            r'We use cookies.*?cookies',
+            r'Log in to Pure.*?Contact us',
+            r'About web accessibility.*?Contact us',
+        ]
+        
+        cleaned = context
+        for pattern in noise_patterns:
+            cleaned = re.sub(pattern, '', cleaned, flags=re.DOTALL)
+        
+        # Remove excessive whitespace
+        cleaned = re.sub(r'\s+', ' ', cleaned)
+        
+        # Limit context size to most relevant parts (first 8000 chars usually contain publications)
+        if len(cleaned) > 8000:
+            cleaned = cleaned[:8000] + "\n\n[Context truncated - focusing on most relevant publications]"
+        
+        return cleaned
 
 # Singleton
 _rag = None

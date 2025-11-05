@@ -10,12 +10,20 @@ export default function Home() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [lastAssistantMessage, setLastAssistantMessage] = useState<string | null>(null);
 
+  const handlePdfUploaded = (filename: string) => {
+    console.log('PDF uploaded:', filename);
+    // You can add additional logic here if needed
+  };
+
   return (
     <div className="flex flex-col h-screen bg-brand-dark text-brand-text">
       <Header />
       <main className="flex flex-1 overflow-hidden">
         {/* Kolom Kiri: Sources (Sidebar) */}
-        <SourcePanel />
+        <SourcePanel 
+          sessionId={sessionId}
+          onPdfUploaded={handlePdfUploaded}
+        />
         
         {/* Kolom Tengah: Chat (Main) */}
         <ChatPanel 

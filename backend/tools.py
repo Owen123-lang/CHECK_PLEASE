@@ -125,16 +125,20 @@ class AcademicSearchTool(BaseTool):
 
             query_vector = embeddings.embed_query(query)
             
+            # INCREASED LIMIT: Get more chunks to include publications
             results = collection.find(
                 sort={"$vector": query_vector},
-                limit=5,
+                limit=20,  # Increased from 5 to 20
                 projection={"*": 1}
             )
 
             docs = list(results)
             
+            print(f"[ACADEMIC_SEARCH] Query: {query}")
+            print(f"[ACADEMIC_SEARCH] Found {len(docs)} documents")
+            
             context_parts = []
-            for doc in docs:
+            for idx, doc in enumerate(docs):
                 content = (
                     doc.get('text') or 
                     doc.get('content') or 
@@ -145,16 +149,20 @@ class AcademicSearchTool(BaseTool):
                 )
                 
                 if content:
+                    source_url = doc.get('source_url', 'Unknown')
+                    print(f"[ACADEMIC_SEARCH]   [{idx+1}] {len(content)} chars from {source_url[:50]}...")
                     context_parts.append(content)
             
             context = "\n---\n".join(context_parts)
             
             if not context:
                 return "⚠️ No relevant information found in database. RECOMMENDATION: Use 'Web Search Tool' to find information on the web."
-                
+            
+            print(f"[ACADEMIC_SEARCH] Total context: {len(context)} characters")
             return context
             
         except Exception as e:
+            print(f"[ACADEMIC_SEARCH ERROR] {e}")
             return f"Database error: {e}. RECOMMENDATION: Use 'Web Search Tool' as fallback."
 
 
@@ -1086,14 +1094,252 @@ Profile Data Preview:
 """
 
 
+# ========== UI SCHOLAR SEARCH TOOL (NEW!) ==========
+class UIScholarSearchInput(BaseModel):
+    """Input schema for UI Scholar Search Tool."""
+    query: str = Field(..., description="Search query for publications (e.g., 'Riri Fitri Sari publications', 'computer networks research UI', 'IoT publications')")
+
+
+class UIScholarSearchTool(BaseTool):
+    name: str = "UI Scholar Publication Search"
+    description: str = (
+        "Searches scholar.ui.ac.id (Universitas Indonesia's official research publication database) "
+        "for academic papers, research, and publications from UI faculty and researchers. "
+        "This is the PRIMARY source for finding publications from UI Electrical Engineering department. "
+        "Use this when user asks about: publications, papers, research output, scientific articles. "
+        "Returns: paper titles, authors, publication year, journal/conference names, and links."
+    )
+    args_schema: Type[BaseModel] = UIScholarSearchInput
+
+    def _run(self, query: str) -> str:
+        """Search UI Scholar - UPDATED: Now uses direct person URL to avoid 403 errors."""
+        print(f"\n[UI_SCHOLAR] Searching for: '{query}'")
+        
+        # NEW STRATEGY: Try to extract person name and use direct URL
+        person_name = self._extract_person_name(query)
+        
+        if person_name:
+            print(f"[UI_SCHOLAR] Detected person name: {person_name}")
+            print(f"[UI_SCHOLAR] Strategy: Direct person URL (bypasses anti-bot)")
+            
+            # Normalize name for URL: "Benyamin Kusumo Putro" -> "benyamin-kusumo-putro"
+            normalized_name = person_name.lower().replace(' ', '-').replace('.', '')
+            person_url = f"https://scholar.ui.ac.id/en/persons/{normalized_name}/"
+            
+            print(f"[UI_SCHOLAR] Trying person URL: {person_url}")
+            
+            # Try to scrape person page directly
+            try:
+                result = self._scrape_person_page(person_url, person_name)
+                if result and len(result) > 200:
+                    return result
+                else:
+                    print(f"[UI_SCHOLAR] Person page not found, trying alternative...")
+            except Exception as e:
+                print(f"[UI_SCHOLAR] Person page error: {e}")
+        
+        # FALLBACK: If person URL fails, recommend manual access
+        return self._fallback_response(query, person_name)
+    
+    def _extract_person_name(self, query: str) -> str:
+        """Extract person name from query."""
+        query_clean = query.lower()
+        for keyword in ['publications', 'research', 'papers', 'publikasi', 'riset', 'karya']:
+            query_clean = query_clean.replace(keyword, '')
+        
+        query_clean = query_clean.strip()
+        
+        # Look for capitalized names (likely person name)
+        import re
+        name_pattern = r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\b'
+        match = re.search(name_pattern, query)
+        
+        if match:
+            return match.group(1)
+        
+        return None
+    
+    def _scrape_person_page(self, url: str, person_name: str) -> str:
+        """Scrape person's profile page directly."""
+        try:
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            }
+            
+            print(f"[UI_SCHOLAR] Fetching: {url}")
+            response = requests.get(url, headers=headers, timeout=20)
+            
+            if response.status_code == 404:
+                print(f"[UI_SCHOLAR] ✗ Person page not found (404)")
+                return None
+            
+            response.raise_for_status()
+            print(f"[UI_SCHOLAR] ✓ HTTP {response.status_code}")
+            
+            soup = BeautifulSoup(response.content, 'html.parser')
+            publications = []
+            
+            # Look for publication links
+            pub_links = soup.find_all('a', href=lambda x: x and '/publications/' in str(x))
+            
+            for link in pub_links[:15]:
+                title = link.get_text(strip=True)
+                href = link.get('href')
+                
+                if len(title) > 20 and title not in ['Publications', 'View', 'More']:
+                    publications.append({
+                        'title': title,
+                        'link': f"https://scholar.ui.ac.id{href}" if not href.startswith('http') else href,
+                        'authors': person_name,
+                        'year': '',
+                        'journal': ''
+                    })
+            
+            if publications:
+                output = f"📚 **Publications by {person_name}** (from scholar.ui.ac.id)\n\n"
+                output += f"Found {len(publications)} publication(s):\n\n"
+                
+                for i, pub in enumerate(publications, 1):
+                    output += f"{i}. **{pub['title']}**\n"
+                    if pub['authors']:
+                        output += f"   👥 {pub['authors']}\n"
+                    if pub['link']:
+                        output += f"   🔗 {pub['link']}\n"
+                    output += "\n"
+                
+                output += f"\n💡 **Source:** Direct person profile on scholar.ui.ac.id\n"
+                print(f"[UI_SCHOLAR] ✓ Extracted {len(publications)} publications")
+                return output
+            else:
+                print(f"[UI_SCHOLAR] ✗ No publications found")
+                return None
+                
+        except Exception as e:
+            print(f"[UI_SCHOLAR] Error: {e}")
+            return None
+    
+    def _fallback_response(self, query: str, person_name: str = None) -> str:
+        """Provide fallback response with manual access instructions."""
+        if person_name:
+            normalized_name = person_name.lower().replace(' ', '-').replace('.', '')
+            direct_url = f"https://scholar.ui.ac.id/en/persons/{normalized_name}/"
+            
+            return f"""⚠️ **Unable to automatically access scholar.ui.ac.id**
+
+**Recommended Actions:**
+
+1. **Visit Person Page Directly**:
+   {direct_url}
+   
+2. **Browse Department Publications**:
+   https://scholar.ui.ac.id/en/organisations/electrical-engineering/publications/
+
+3. **Alternative Search**:
+   - Use "Google Scholar Search Tool" for publications by {person_name}
+
+**Why this happened:**
+scholar.ui.ac.id blocks automated search queries but allows direct page access."""
+        
+        else:
+            return f"""⚠️ **scholar.ui.ac.id search unavailable**
+
+**Alternative Solutions:**
+
+1. **Visit Directly**: https://scholar.ui.ac.id/en/publications/
+
+2. **Use Department Page**: 
+   https://scholar.ui.ac.id/en/organisations/electrical-engineering/publications/
+
+3. **Try Google Scholar Search Tool** for broader publication search"""
+
+
+# ========== PDF SEARCH TOOL (USER UPLOADED) ==========
+class PDFSearchInput(BaseModel):
+    """Input schema for PDF Search Tool."""
+    query: str = Field(..., description="Search query to find information within uploaded PDF documents")
+
+
+class PDFSearchTool(BaseTool):
+    name: str = "User PDF Search Tool"
+    description: str = (
+        "Searches through user-uploaded PDF documents for relevant information. "
+        "This tool ONLY works if the user has uploaded PDF files. "
+        "Use this when user asks questions about their uploaded documents. "
+        "Returns relevant text excerpts from the uploaded PDFs that match the query."
+    )
+    args_schema: Type[BaseModel] = PDFSearchInput
+
+    def _run(self, query: str) -> str:
+        """Search through uploaded PDF content stored in database."""
+        if embeddings is None:
+            return "Error: Embedding model failed to initialize."
+            
+        try:
+            client = DataAPIClient(ASTRA_DB_APPLICATION_TOKEN)
+            db = client.get_database_by_api_endpoint(ASTRA_DB_API_ENDPOINT)
+            collection = db.get_collection(COLLECTION_NAME)
+
+            query_vector = embeddings.embed_query(query)
+            
+            # Search for PDF content specifically
+            results = collection.find(
+                filter={"source_type": "user_pdf"},
+                sort={"$vector": query_vector},
+                limit=10,
+                projection={"*": 1}
+            )
+
+            docs = list(results)
+            
+            print(f"[PDF_SEARCH] Query: {query}")
+            print(f"[PDF_SEARCH] Found {len(docs)} PDF chunks")
+            
+            if not docs:
+                return "⚠️ No uploaded PDF documents found. Please upload a PDF file first using the 'Add New Source' button."
+            
+            context_parts = []
+            pdf_files = set()
+            
+            for idx, doc in enumerate(docs):
+                content = (
+                    doc.get('text') or 
+                    doc.get('content') or 
+                    doc.get('page_content') or 
+                    str(doc)
+                )
+                
+                if content:
+                    pdf_name = doc.get('pdf_name', 'Unknown PDF')
+                    page_num = doc.get('page_number', '?')
+                    pdf_files.add(pdf_name)
+                    
+                    context_parts.append(f"[From: {pdf_name}, Page {page_num}]\n{content}")
+                    print(f"[PDF_SEARCH]   [{idx+1}] {len(content)} chars from {pdf_name} (page {page_num})")
+            
+            context = "\n\n---\n\n".join(context_parts)
+            
+            result = f"📄 **Information from {len(pdf_files)} uploaded PDF(s):**\n\n"
+            result += f"Files: {', '.join(pdf_files)}\n\n"
+            result += f"**Relevant Content:**\n\n{context}"
+            
+            print(f"[PDF_SEARCH] Total context: {len(context)} characters from {len(pdf_files)} files")
+            return result
+            
+        except Exception as e:
+            print(f"[PDF_SEARCH ERROR] {e}")
+            return f"Error searching PDF documents: {e}"
+
+
 # Initialize tool instances
 web_search_tool = TavilySearchTool()
 academic_search_tool = AcademicSearchTool()
 dynamic_web_scraper_tool = DynamicWebScraperTool()
 google_scholar_tool = GoogleScholarSearchTool()
-google_scholar_profiles_tool = GoogleScholarProfilesSearchTool()  # New Google Scholar Profiles Search Tool
-google_scholar_author_tool = GoogleScholarAuthorProfileTool()  # New Google Scholar Author Profile Tool
-google_scholar_publications_tool = GoogleScholarPublicationsSearchTool()  # New Google Scholar Publications Search Tool
-google_scholar_cited_by_tool = GoogleScholarCitedByTool()  # New Google Scholar Cited By Tool
-sinta_scraper_tool = SintaScraperTool()  # New SINTA tool
-cv_generator_tool = CVGeneratorTool()  # New CV Generator tool
+google_scholar_profiles_tool = GoogleScholarProfilesSearchTool()
+google_scholar_author_tool = GoogleScholarAuthorProfileTool()
+google_scholar_publications_tool = GoogleScholarPublicationsSearchTool()
+google_scholar_cited_by_tool = GoogleScholarCitedByTool()
+sinta_scraper_tool = SintaScraperTool()
+cv_generator_tool = CVGeneratorTool()
+ui_scholar_search_tool = UIScholarSearchTool()
+pdf_search_tool = PDFSearchTool()  # New PDF search tool
