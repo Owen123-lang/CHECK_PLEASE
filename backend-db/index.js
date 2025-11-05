@@ -17,6 +17,9 @@ app.use(cors(corsOptions));
 app.use(express.json());
 
 app.use("/api/users", require("./src/routes/user.route"));
+app.use("/api/notebooks", require("./src/routes/notebook.route"));
+app.use("/api/pdfs", require("./src/routes/pdf.route"));
+app.use("/api/chat", require("./src/routes/chat.route"));
 
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);

@@ -1,12 +1,12 @@
 const db = require("../database/pg.database");
 
-exports.createNotebook = async (userId, title) => {
+exports.createChat = async (notebookId, sender, body) => {
     try {
         const res = await db.query(
-            `INSERT INTO notebook (user_id, title)
-             VALUES ($1, $2)
+            `INSERT INTO chat (notebook_id, sender, body)
+             VALUES ($1, $2, $3)
              RETURNING *`,
-            [userId, title]
+            [notebookId, sender, body]
         );
 
         if (!res?.rows[0]) {
@@ -19,12 +19,12 @@ exports.createNotebook = async (userId, title) => {
     }
 };
 
-exports.getNotebookById = async (id, userId) => {
+exports.getChatById = async (id, notebookId) => {
     try {
         const res = await db.query(
-            `SELECT * FROM notebook 
-             WHERE id = $1 AND user_id = $2`,
-            [id, userId]
+            `SELECT * FROM chat 
+             WHERE id = $1 AND notebook_id = $2`,
+            [id, notebookId]
         );
 
         if (!res?.rows[0]) {
@@ -37,13 +37,13 @@ exports.getNotebookById = async (id, userId) => {
     }
 };
 
-exports.getAllNotebooks = async (userId) => {
+exports.getChatsByNotebookId = async (notebookId) => {
     try {
         const res = await db.query(
-            `SELECT * FROM notebook 
-             WHERE user_id = $1 
-             ORDER BY created_at DESC`,
-            [userId]
+            `SELECT * FROM chat 
+             WHERE notebook_id = $1 
+             ORDER BY created_at ASC`,
+            [notebookId]
         );
 
         return res.rows;
@@ -52,14 +52,14 @@ exports.getAllNotebooks = async (userId) => {
     }
 };
 
-exports.updateNotebook = async (id, userId, title) => {
+exports.updateChat = async (id, notebookId, body) => {
     try {
         const res = await db.query(
-            `UPDATE notebook 
-             SET title = $1 
-             WHERE id = $2 AND user_id = $3 
+            `UPDATE chat 
+             SET body = $1 
+             WHERE id = $2 AND notebook_id = $3 
              RETURNING *`,
-            [title, id, userId]
+            [body, id, notebookId]
         );
 
         if (!res?.rows[0]) {
@@ -72,13 +72,13 @@ exports.updateNotebook = async (id, userId, title) => {
     }
 };
 
-exports.deleteNotebook = async (id, userId) => {
+exports.deleteChat = async (id, notebookId) => {
     try {
         const res = await db.query(
-            `DELETE FROM notebook 
-             WHERE id = $1 AND user_id = $2 
+            `DELETE FROM chat 
+             WHERE id = $1 AND notebook_id = $2 
              RETURNING *`,
-            [id, userId]
+            [id, notebookId]
         );
 
         if (!res?.rows[0]) {

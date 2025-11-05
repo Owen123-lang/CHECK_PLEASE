@@ -1,5 +1,6 @@
 const userRepository = require("../repositories/user.repository");
 const baseResponse = require("../utils/baseResponse.util");
+const { generateToken } = require('../utils/jwt.util');
 
 const jwt = require("jsonwebtoken"); 
 const bcrypt = require("bcrypt");
@@ -95,18 +96,13 @@ exports.loginUser = async (req, res) => {
       return baseResponse(res, false, 401, "Invalid email or password", null);
     }
 
-    // Generate JWT token
-    const token = jwt.sign(
-      {
-        id: user.id,
-        email: user.email,
-        role: user.role,
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: process.env.JWT_EXPIRES_IN || "6h" }
-    );
+    // Use the centralized JWT util instead of direct jwt.sign
+    const token = generateToken({
+      id: user.id,
+      email: user.email,
+      role: user.role,
+    });
 
-    // Kirim response sesuai standar frontend
     return res.json({
       token,
       user: {

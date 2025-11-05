@@ -2,11 +2,11 @@ const notebookRepository = require("../repositories/notebook.repository");
 const baseResponse = require("../utils/baseResponse.util");
 
 exports.createNotebook = async (req, res) => {
-    const { title, body } = req.body;
+    const { title } = req.body;
     const userId = req.user.id;
 
     try {
-        const notebook = await notebookRepository.createNotebook(userId, title, body);
+        const notebook = await notebookRepository.createNotebook(userId, title);
 
         if (!notebook) {
             return baseResponse(res, false, 400, "Failed to create notebook", null);
@@ -51,11 +51,11 @@ exports.getAllNotebooks = async (req, res) => {
 
 exports.updateNotebook = async (req, res) => {
     const { id } = req.params;
-    const { title, body } = req.body;
+    const { title } = req.body;
     const userId = req.user.id;
 
     try {
-        const notebook = await notebookRepository.updateNotebook(id, userId, title, body);
+        const notebook = await notebookRepository.updateNotebook(id, userId, title);
 
         if (!notebook) {
             return baseResponse(res, false, 404, "Notebook not found", null);
