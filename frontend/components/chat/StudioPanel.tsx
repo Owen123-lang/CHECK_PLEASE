@@ -86,49 +86,54 @@ export default function StudioPanel({ sessionId, lastMessage }: StudioPanelProps
   };
 
   return (
-    <aside className="w-1/5 bg-brand-container p-6 overflow-y-auto border-l border-brand-border hidden lg:block">
-      <h2 className="text-lg font-bold text-brand-yellow mb-4">Studio</h2>
+    <aside className="w-64 lg:w-72 bg-[#15191C] p-4 lg:p-6 border-l-2 border-brand-border hidden lg:block">
+      <h2 className="text-lg lg:text-xl font-bold text-brand-yellow mb-4 lg:mb-6 flex items-center gap-2">
+        <FileText size={20} />
+        Studio
+      </h2>
       
-      <div className="space-y-4">
+      <div className="space-y-3 lg:space-y-4">
         <button 
           onClick={handleExportPDF}
-          className="w-full bg-brand-red text-white font-bold py-3 rounded-lg hover:bg-brand-red-dark transition-colors shadow-md flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full bg-brand-red text-white font-bold py-3 lg:py-4 rounded-xl hover:bg-brand-red-dark hover:shadow-lg hover:shadow-brand-red/50 transition-all duration-300 shadow-md flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-105"
           disabled={isExporting}
           title="Generate professional CV PDF for the professor discussed in chat"
         >
           {isExporting ? (
             <>
               <Loader2 size={18} className="animate-spin" />
-              <span>Generating CV...</span>
+              <span className="text-sm lg:text-base">Generating CV...</span>
             </>
           ) : (
             <>
-              <FileText size={18} />
-              <span>Export Profile to PDF</span>
+              <Download size={18} />
+              <span className="text-sm lg:text-base">Export Profile to PDF</span>
             </>
           )}
         </button>
         
-        <button className="w-full bg-gray-700 text-white font-semibold py-3 rounded-lg hover:bg-gray-600 transition-colors shadow-sm flex items-center justify-center space-x-2">
-          <Mail size={18} /> <span>Draft Email to Expert</span>
+        <button className="w-full bg-brand-dark border-2 border-brand-border text-white font-semibold py-3 lg:py-4 rounded-xl hover:border-brand-yellow/50 hover:bg-brand-container transition-all duration-300 shadow-sm flex items-center justify-center space-x-2 transform hover:scale-105">
+          <Mail size={18} />
+          <span className="text-sm lg:text-base">Draft Email to Expert</span>
         </button>
       </div>
 
-      <hr className="border-brand-border my-6" />
+      <hr className="border-brand-border my-6 lg:my-8" />
 
-      <h3 className="text-md font-bold text-brand-yellow mb-3 flex items-center space-x-2">
-        <History size={18} /> <span>Search History</span>
+      <h3 className="text-base lg:text-md font-bold text-brand-yellow mb-3 lg:mb-4 flex items-center space-x-2">
+        <History size={18} />
+        <span>Search History</span>
       </h3>
-      <div className="space-y-2 text-sm">
-        <div className="p-3 bg-gray-800 rounded-md border border-brand-border text-gray-300 hover:bg-gray-700 transition-colors cursor-pointer flex items-center space-x-2">
+      <div className="space-y-2 lg:space-y-3 text-sm">
+        <div className="p-3 lg:p-4 bg-brand-dark rounded-xl border border-brand-border text-gray-300 hover:border-brand-yellow/50 hover:bg-brand-container transition-all duration-300 cursor-pointer flex items-center space-x-2 transform hover:scale-105">
             <BookOpen size={16} className="text-gray-500" />
             <p className="truncate">"Prof. Riri Fitri Sari"</p>
         </div>
-        <div className="p-3 bg-gray-800 rounded-md border border-brand-border text-gray-300 hover:bg-gray-700 transition-colors cursor-pointer flex items-center space-x-2">
+        <div className="p-3 lg:p-4 bg-brand-dark rounded-xl border border-brand-border text-gray-300 hover:border-brand-yellow/50 hover:bg-brand-container transition-all duration-300 cursor-pointer flex items-center space-x-2 transform hover:scale-105">
             <BookOpen size={16} className="text-gray-500" />
             <p className="truncate">"Dr. Muhammad Suryanegara"</p>
         </div>
-        <div className="p-3 bg-gray-800 rounded-md border border-brand-border text-gray-300 hover:bg-gray-700 transition-colors cursor-pointer flex items-center space-x-2">
+        <div className="p-3 lg:p-4 bg-brand-dark rounded-xl border border-brand-border text-gray-300 hover:border-brand-yellow/50 hover:bg-brand-container transition-all duration-300 cursor-pointer flex items-center space-x-2 transform hover:scale-105">
             <BookOpen size={16} className="text-gray-500" />
             <p className="truncate">"DTE UI Professors"</p>
         </div>

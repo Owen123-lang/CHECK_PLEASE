@@ -85,44 +85,49 @@ export default function SourcePanel({ sessionId, onPdfUploaded }: SourcePanelPro
   };
 
   return (
-    <aside className="w-1/5 bg-brand-container p-4 overflow-y-auto border-r border-brand-border hidden md:block">
-      <h2 className="text-lg font-bold text-brand-yellow mb-4">Sources</h2>
+    <aside className="w-64 lg:w-72 bg-[#15191C] p-4 lg:p-6 overflow-y-auto border-r-2 border-brand-border hidden md:block custom-scrollbar">
+      <h2 className="text-lg lg:text-xl font-bold text-brand-yellow mb-4 lg:mb-6 flex items-center gap-2">
+        <FileText size={20} />
+        Sources
+      </h2>
       
       {/* Upload Status Messages */}
       {uploadSuccess && (
-        <div className="mb-3 p-3 bg-green-900 text-green-300 rounded-lg text-sm flex items-start space-x-2">
-          <CheckCircle size={16} className="mt-0.5 flex-shrink-0" />
+        <div className="mb-4 p-3 lg:p-4 bg-green-900/30 border border-green-700 text-green-300 rounded-xl text-sm flex items-start space-x-2 animate-in fade-in slide-in-from-top duration-300">
+          <CheckCircle size={18} className="mt-0.5 flex-shrink-0" />
           <span>{uploadSuccess}</span>
         </div>
       )}
       
       {uploadError && (
-        <div className="mb-3 p-3 bg-red-900 text-red-300 rounded-lg text-sm flex items-start space-x-2">
-          <X size={16} className="mt-0.5 flex-shrink-0" />
+        <div className="mb-4 p-3 lg:p-4 bg-red-900/30 border border-red-700 text-red-300 rounded-xl text-sm flex items-start space-x-2 animate-in fade-in slide-in-from-top duration-300">
+          <X size={18} className="mt-0.5 flex-shrink-0" />
           <span>{uploadError}</span>
         </div>
       )}
 
       <div className="space-y-3">
         {uploadedPdfs.length === 0 ? (
-          <p className="text-gray-500 text-sm">
-            Upload your PDF documents here. The AI will be able to answer questions based on your uploaded files.
-          </p>
+          <div className="p-4 bg-brand-dark rounded-xl border border-brand-border">
+            <p className="text-gray-400 text-sm leading-relaxed">
+              Upload your PDF documents here. The AI will be able to answer questions based on your uploaded files.
+            </p>
+          </div>
         ) : (
           <>
-            <p className="text-gray-400 text-xs mb-2">📄 Uploaded PDFs:</p>
+            <p className="text-gray-400 text-xs mb-3 font-medium">📄 Uploaded PDFs:</p>
             {uploadedPdfs.map((filename, index) => (
-              <div key={index} className="flex items-center justify-between p-3 bg-gray-800 rounded-lg border border-brand-border hover:bg-gray-700 transition-colors group">
+              <div key={index} className="flex items-center justify-between p-3 lg:p-4 bg-brand-dark rounded-xl border border-brand-border hover:border-brand-yellow/50 transition-all duration-300 group hover:scale-105">
                 <div className="flex items-center space-x-2 flex-1 min-w-0">
                   <FileText size={18} className="text-brand-yellow flex-shrink-0" />
                   <p className="font-semibold text-gray-200 truncate text-sm">{filename}</p>
                 </div>
                 <button
                   onClick={() => handleRemovePdf(filename)}
-                  className="ml-2 text-red-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="ml-2 text-red-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all duration-300"
                   title="Remove"
                 >
-                  <X size={16} />
+                  <X size={18} />
                 </button>
               </div>
             ))}
@@ -143,7 +148,7 @@ export default function SourcePanel({ sessionId, onPdfUploaded }: SourcePanelPro
       <button
         onClick={handleAddSourceClick}
         disabled={isUploading}
-        className="w-full mt-6 flex items-center justify-center space-x-2 bg-brand-yellow text-black font-bold py-2 px-4 rounded-lg hover:bg-brand-yellow-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        className="w-full mt-6 flex items-center justify-center space-x-2 bg-brand-yellow text-[#1A1E21] font-bold py-3 px-4 rounded-xl hover:bg-brand-yellow-dark hover:shadow-lg hover:shadow-brand-yellow/50 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {isUploading ? (
           <>
@@ -158,7 +163,7 @@ export default function SourcePanel({ sessionId, onPdfUploaded }: SourcePanelPro
         )}
       </button>
 
-      <p className="text-xs text-gray-500 mt-2 text-center">
+      <p className="text-xs text-gray-500 mt-3 text-center font-medium">
         Max 10MB • PDF only
       </p>
     </aside>

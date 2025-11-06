@@ -13,14 +13,72 @@ html, body {
 }
 
 .custom-scrollbar::-webkit-scrollbar-track {
-  background: #1a1a1a;
-}
-
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #FFD700;
+  background: #232B2F;
   border-radius: 4px;
 }
 
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #FFFF00;
+  border-radius: 4px;
+  transition: background 0.3s;
+}
+
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #b89c00;
+  background: #FFD700;
+}
+
+/* Animations */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slide-in-from-bottom {
+  from {
+    transform: translateY(10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slide-in-from-top {
+  from {
+    transform: translateY(-10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.animate-in {
+  animation-fill-mode: both;
+}
+
+.fade-in {
+  animation-name: fade-in;
+}
+
+.slide-in-from-bottom {
+  animation-name: slide-in-from-bottom;
+}
+
+.slide-in-from-top {
+  animation-name: slide-in-from-top;
+}
+
+.duration-300 {
+  animation-duration: 300ms;
+}
+
+.delay-300 {
+  animation-delay: 300ms;
 }

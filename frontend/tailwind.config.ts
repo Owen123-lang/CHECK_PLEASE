@@ -9,17 +9,17 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        'brand-dark': '#0a0a0a', // Latar belakang utama (sangat gelap)
-        'brand-container': '#1a1a1a', // Latar belakang panel/kontainer
+        'brand-dark': '#1A1E21', // Latar belakang utama - match landing page
+        'brand-container': '#232B2F', // Latar belakang panel/kontainer - slightly lighter
         'brand-border': '#2a2a2a', // Border
         'brand-text': '#e0e0e0', // Teks sekunder
         'brand-yellow': {
-          DEFAULT: '#FFD700', // Kuning primer (Saul Goodman)
-          dark: '#b89c00',
+          DEFAULT: '#FFFF00', // Kuning primer - match landing page
+          dark: '#FFD700',
         },
         'brand-red': {
-          DEFAULT: '#D70000', // Merah primer
-          dark: '#a00000',
+          DEFAULT: '#FF0000', // Merah primer - match landing page
+          dark: '#D70000',
         },
       },
     },

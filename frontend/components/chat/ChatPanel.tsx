@@ -111,25 +111,33 @@ export default function ChatPanel({ onSessionUpdate, onMessageUpdate }: ChatPane
   return (
     <main className="flex-1 flex flex-col overflow-hidden bg-brand-dark">
       {/* Area Tampilan Chat */}
-      <div className="flex-1 p-6 space-y-4 overflow-y-auto custom-scrollbar">
+      <div className="flex-1 p-4 lg:p-6 space-y-4 overflow-y-auto custom-scrollbar">
         {messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-center text-gray-500">
-            <h2 className="text-3xl font-bold text-brand-yellow mb-2">Check Please</h2>
-            <p className="text-lg">Your Academic Research Assistant for DTE UI</p>
-            <p className="text-sm mt-2">Ready to search academic profiles. Start by asking about a professor or researcher.</p>
-            <div className="mt-6 p-4 bg-gray-800 rounded-lg max-w-md">
-              <p className="text-brand-yellow font-semibold mb-2">💡 Try asking:</p>
-              <p className="text-sm text-gray-400">"Tell me about Prof. Dr. Riri Fitri Sari"</p>
-              <p className="text-xs text-gray-500 mt-2">Then click "Export Profile to PDF" in the Studio panel →</p>
+          <div className="flex flex-col items-center justify-center h-full text-center px-4">
+            <div className="max-w-2xl">
+              <h2 className="text-3xl lg:text-4xl font-bold text-brand-yellow mb-3">Check Please</h2>
+              <p className="text-lg lg:text-xl text-gray-300 mb-2">Your Academic Research Assistant</p>
+              <p className="text-sm lg:text-base text-gray-400 mb-8">Ready to search academic profiles. Start by asking about a professor or researcher.</p>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-8">
+                <div className="p-4 lg:p-5 bg-brand-container rounded-xl border border-brand-border hover:border-brand-yellow/50 transition-all duration-300 hover:scale-105">
+                  <p className="text-brand-yellow font-semibold mb-2 text-sm lg:text-base">💡 Try asking:</p>
+                  <p className="text-sm text-gray-300">"Tell me about Prof. Dr. Riri Fitri Sari"</p>
+                </div>
+                <div className="p-4 lg:p-5 bg-brand-container rounded-xl border border-brand-border hover:border-brand-red/50 transition-all duration-300 hover:scale-105">
+                  <p className="text-brand-red font-semibold mb-2 text-sm lg:text-base">📄 Next step:</p>
+                  <p className="text-xs lg:text-sm text-gray-400">Click "Export Profile to PDF" in the Studio panel →</p>
+                </div>
+              </div>
             </div>
           </div>
         ) : (
           messages.map((m: Message) => (
-            <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              <div className={`p-4 rounded-xl shadow-md max-w-2xl break-words whitespace-pre-wrap ${
+            <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom duration-300`}>
+              <div className={`p-3 lg:p-4 rounded-2xl shadow-lg max-w-[85%] lg:max-w-2xl break-words whitespace-pre-wrap ${
                 m.role === 'user' 
                   ? 'bg-brand-red text-white' 
-                  : 'bg-gray-800 text-gray-200'
+                  : 'bg-brand-container text-gray-200 border border-brand-border'
               }`}>
                 {m.role === 'assistant' ? (
                   <div dangerouslySetInnerHTML={{ __html: m.content }} />
@@ -141,16 +149,16 @@ export default function ChatPanel({ onSessionUpdate, onMessageUpdate }: ChatPane
           ))
         )}
         {isLoading && (
-           <div className="flex justify-start">
-             <div className="bg-gray-800 text-gray-400 p-4 rounded-xl shadow-md flex items-center space-x-2">
+           <div className="flex justify-start animate-in fade-in duration-300">
+             <div className="bg-brand-container border border-brand-border text-gray-300 p-3 lg:p-4 rounded-2xl shadow-lg flex items-center space-x-3">
                 <Loader2 size={20} className="animate-spin text-brand-yellow" />
-                <span>AI is researching academic profiles...</span>
+                <span className="text-sm lg:text-base">AI is researching academic profiles...</span>
              </div>
            </div>
         )}
         {error && (
-            <div className="flex justify-start">
-              <div className="bg-red-900 text-red-300 p-4 rounded-xl shadow-md">
+            <div className="flex justify-start animate-in fade-in duration-300">
+              <div className="bg-red-900/50 border border-red-700 text-red-300 p-3 lg:p-4 rounded-2xl shadow-lg max-w-2xl">
                 {error}
               </div>
             </div>
@@ -159,66 +167,68 @@ export default function ChatPanel({ onSessionUpdate, onMessageUpdate }: ChatPane
       </div>
 
       {/* UI untuk menambahkan URL */}
-      <div className="p-4 border-t border-brand-border bg-brand-dark">
-        <div className="mb-3">
-          <div className="flex items-center space-x-2 mb-2">
-            <input
-              type="text"
-              className="flex-1 bg-gray-800 text-white placeholder-gray-500 rounded-lg p-2 border border-brand-border outline-none focus:border-brand-yellow"
-              placeholder="Paste a URL source (e.g., Google Scholar profile)..."
-              value={tempUrl}
-              onChange={(e) => setTempUrl(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  handleAddUrl();
-                }
-              }}
-            />
-            <button
-              type="button"
-              onClick={handleAddUrl}
-              className="bg-gray-700 text-white py-2 px-4 rounded-lg hover:bg-gray-600 transition-colors"
-            >
-              Add URL
-            </button>
-          </div>
-          {sourceUrls.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {sourceUrls.map((url, index) => (
-                <div key={index} className="bg-gray-700 text-sm text-yellow-400 rounded-full py-1 px-3 flex items-center gap-2">
-                  <span className="max-w-xs truncate">{url.length > 40 ? url.substring(0, 40) + '...' : url}</span>
-                  <button 
-                    onClick={() => handleRemoveUrl(url)} 
-                    className="text-red-500 hover:text-red-400"
-                  >
-                    <X size={16} />
-                  </button>
-                </div>
-              ))}
+      <div className="p-4 lg:p-6 border-t-2 border-brand-border bg-brand-container">
+        <div className="max-w-4xl mx-auto">
+          <div className="mb-4">
+            <div className="flex items-center space-x-2 mb-3">
+              <input
+                type="text"
+                className="flex-1 bg-brand-dark text-white placeholder-gray-500 rounded-xl p-3 border-2 border-brand-border outline-none focus:border-brand-yellow transition-colors text-sm lg:text-base"
+                placeholder="Paste a URL source (e.g., Google Scholar profile)..."
+                value={tempUrl}
+                onChange={(e) => setTempUrl(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleAddUrl();
+                  }
+                }}
+              />
+              <button
+                type="button"
+                onClick={handleAddUrl}
+                className="bg-brand-container border-2 border-brand-border text-white py-3 px-4 lg:px-6 rounded-xl hover:border-brand-yellow hover:bg-brand-dark transition-all duration-300 font-medium text-sm lg:text-base"
+              >
+                Add URL
+              </button>
             </div>
-          )}
-        </div>
-
-        {/* Input Form Chat */}
-        <form onSubmit={handleSubmit}>
-          <div className="flex items-center bg-gray-800 rounded-xl p-2 border border-brand-border focus-within:border-brand-yellow shadow-inner">
-            <input
-              className="flex-1 bg-transparent text-white placeholder-gray-500 outline-none px-3 py-2"
-              value={input}
-              placeholder="Search for an academic expert (e.g., Prof. Riri Fitri Sari)..."
-              onChange={(e) => setInput(e.target.value)}
-              disabled={isLoading}
-            />
-            <button 
-              type="submit" 
-              className="bg-brand-yellow text-black font-bold py-2 px-5 rounded-lg hover:bg-brand-yellow-dark transition-colors disabled:opacity-50 shadow-md flex items-center space-x-2"
-              disabled={isLoading}
-            >
-              <Send size={18} /> <span>Send</span>
-            </button>
+            {sourceUrls.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {sourceUrls.map((url, index) => (
+                  <div key={index} className="bg-brand-dark border border-brand-yellow/50 text-sm text-brand-yellow rounded-full py-1.5 px-4 flex items-center gap-2 hover:bg-brand-yellow/10 transition-colors">
+                    <span className="max-w-xs truncate">{url.length > 40 ? url.substring(0, 40) + '...' : url}</span>
+                    <button 
+                      onClick={() => handleRemoveUrl(url)} 
+                      className="text-red-500 hover:text-red-400 transition-colors"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
-        </form>
+
+          {/* Input Form Chat */}
+          <form onSubmit={handleSubmit}>
+            <div className="flex items-center bg-brand-dark rounded-2xl p-2 border-2 border-brand-border focus-within:border-brand-yellow transition-colors shadow-lg">
+              <input
+                className="flex-1 bg-transparent text-white placeholder-gray-500 outline-none px-3 lg:px-4 py-2 lg:py-3 text-sm lg:text-base"
+                value={input}
+                placeholder="Search for an academic expert (e.g., Prof. Riri Fitri Sari)..."
+                onChange={(e) => setInput(e.target.value)}
+                disabled={isLoading}
+              />
+              <button 
+                type="submit" 
+                className="bg-brand-yellow text-[#1A1E21] font-bold py-2 lg:py-3 px-4 lg:px-6 rounded-xl hover:bg-brand-yellow-dark hover:shadow-lg hover:shadow-brand-yellow/50 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2 text-sm lg:text-base"
+                disabled={isLoading}
+              >
+                <Send size={18} /> <span className="hidden sm:inline">Send</span>
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
     </main>
   );

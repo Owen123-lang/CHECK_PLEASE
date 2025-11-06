@@ -1,15 +1,15 @@
-import LandingHeader from "@/components/landing/LandingHeader";
-import HeroSection from "@/components/landing/HeroSection";
-import FeaturesSection from "@/components/landing/FeaturesSection";
-import Footer from "@/components/landing/Footer";
+import LandingHeader from '@/components/landing/LandingHeader';
+import HeroSection from '@/components/landing/HeroSection';
+import FeaturesSection from '@/components/landing/FeaturesSection';
+import Footer from '@/components/landing/Footer';
 
-export default function HomePage() {
+export default function Home() {
   return (
-    <div className="bg-black min-h-screen text-white">
+    <main className="min-h-screen bg-[#1A1E21]">
       <LandingHeader />
       <HeroSection />
       <FeaturesSection />
       <Footer />
-    </div>
+    </main>
   );
 }
