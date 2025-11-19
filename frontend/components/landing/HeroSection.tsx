@@ -25,7 +25,7 @@ export default function HeroSection() {
 
         {/* CTA Button */}
         <Link
-          href="/chat"
+          href="/notebooks"
           className="inline-flex items-center gap-3 lg:gap-4 px-6 lg:px-8 py-3 lg:py-4 bg-[#FF0000] text-white text-[18px] lg:text-[24px] font-semibold rounded-[20px] hover:bg-[#D70000] hover:shadow-2xl hover:shadow-[#FF0000]/50 transition-all duration-300 transform hover:scale-105 animate-in fade-in slide-in-from-bottom delay-300 group"
         >
           Get Started
