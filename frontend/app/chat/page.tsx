@@ -4,7 +4,6 @@ import { useState } from "react";
 import Header from "@/components/chat/Header";
 import SourcePanel from "@/components/chat/SourcePanel";
 import ChatPanel from "@/components/chat/ChatPanel";
-import StudioPanel from "@/components/chat/StudioPanel";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
 
 export default function Home() {
@@ -21,9 +20,10 @@ export default function Home() {
       <div className="flex flex-col h-screen bg-brand-dark text-brand-text">
         <Header />
         <main className="flex flex-1 overflow-hidden">
-          {/* Kolom Kiri: Sources (Sidebar) */}
+          {/* Kolom Kiri: Sources & Studio (Sidebar) */}
           <SourcePanel
             sessionId={sessionId}
+            lastMessage={lastAssistantMessage}
             onPdfUploaded={handlePdfUploaded}
           />
           
@@ -31,12 +31,6 @@ export default function Home() {
           <ChatPanel
             onSessionUpdate={setSessionId}
             onMessageUpdate={setLastAssistantMessage}
-          />
-          
-          {/* Kolom Kanan: Studio (Tools) */}
-          <StudioPanel
-            sessionId={sessionId}
-            lastMessage={lastAssistantMessage}
           />
         </main>
       </div>

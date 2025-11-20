@@ -2,9 +2,11 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function LandingHeader() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { isAuthenticated, logout } = useAuth();
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-[#1A1E21]/95 backdrop-blur-sm border-b border-[#2a2a2a]">
@@ -29,18 +31,27 @@ export default function LandingHeader() {
               <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-[#FFFF00] transition-all duration-300 group-hover:w-full" />
             </Link>
             <Link
-              href="#about"
+              href="/notebooks"
               className="text-white text-[16px] xl:text-[20px] font-semibold hover:text-[#FFFF00] transition-all duration-300 relative group"
             >
-              About Us
+              Notebooks
               <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-[#FFFF00] transition-all duration-300 group-hover:w-full" />
             </Link>
-            <Link
-              href="/login"
-              className="px-6 xl:px-8 py-2 xl:py-3 bg-[#FFFF00] text-[#1A1E21] text-[16px] xl:text-[20px] font-semibold rounded-[10px] hover:bg-[#FFD700] hover:shadow-lg hover:shadow-[#FFFF00]/50 transition-all duration-300 transform hover:scale-105"
-            >
-              Login
-            </Link>
+            {isAuthenticated ? (
+              <button
+                onClick={logout}
+                className="px-6 xl:px-8 py-2 xl:py-3 bg-[#FF0000] text-white text-[16px] xl:text-[20px] font-semibold rounded-[10px] hover:bg-[#D70000] hover:shadow-lg hover:shadow-[#FF0000]/50 transition-all duration-300 transform hover:scale-105"
+              >
+                Logout
+              </button>
+            ) : (
+              <Link
+                href="/login"
+                className="px-6 xl:px-8 py-2 xl:py-3 bg-[#FFFF00] text-[#1A1E21] text-[16px] xl:text-[20px] font-semibold rounded-[10px] hover:bg-[#FFD700] hover:shadow-lg hover:shadow-[#FFFF00]/50 transition-all duration-300 transform hover:scale-105"
+              >
+                Login
+              </Link>
+            )}
           </nav>
 
           {/* Mobile Menu Button */}
@@ -72,19 +83,31 @@ export default function LandingHeader() {
               Features
             </Link>
             <Link
-              href="#about"
+              href="/notebooks"
               onClick={() => setMobileMenuOpen(false)}
               className="text-white text-[20px] font-semibold hover:text-[#FFFF00] transition-colors py-2 border-b border-[#2a2a2a]"
             >
-              About Us
+              Notebooks
             </Link>
-            <Link
-              href="/login"
-              onClick={() => setMobileMenuOpen(false)}
-              className="text-center px-6 py-3 bg-[#FFFF00] text-[#1A1E21] text-[20px] font-semibold rounded-[10px] hover:bg-[#FFD700] transition-colors"
-            >
-              Login
-            </Link>
+            {isAuthenticated ? (
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  logout();
+                }}
+                className="text-center px-6 py-3 bg-[#FF0000] text-white text-[20px] font-semibold rounded-[10px] hover:bg-[#D70000] transition-colors"
+              >
+                Logout
+              </button>
+            ) : (
+              <Link
+                href="/login"
+                onClick={() => setMobileMenuOpen(false)}
+                className="text-center px-6 py-3 bg-[#FFFF00] text-[#1A1E21] text-[20px] font-semibold rounded-[10px] hover:bg-[#FFD700] transition-colors"
+              >
+                Login
+              </Link>
+            )}
           </nav>
         )}
       </div>

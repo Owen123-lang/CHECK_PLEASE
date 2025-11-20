@@ -1,19 +1,96 @@
 "use client";
 
-import { FileText, Plus, Upload, X, CheckCircle, Loader2 } from 'lucide-react';
+import { FileText, Plus, Upload, X, CheckCircle, Loader2, Download } from 'lucide-react';
 import { useState, useRef } from 'react';
 
 interface SourcePanelProps {
   sessionId?: string | null;
+  lastMessage?: string | null;
   onPdfUploaded?: (filename: string) => void;
 }
 
-export default function SourcePanel({ sessionId, onPdfUploaded }: SourcePanelProps) {
+export default function SourcePanel({ sessionId, lastMessage, onPdfUploaded }: SourcePanelProps) {
   const [uploadedPdfs, setUploadedPdfs] = useState<string[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Function to extract professor name from chat content
+  const extractProfessorName = (content: string): string | null => {
+    if (!content) return null;
+    
+    // Look for common patterns: Prof., Dr., etc.
+    const patterns = [
+      /(?:Prof\.?\s*)?(?:Dr\.?\s*)?(?:Ir\.?\s*)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/,
+      /untuk\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/i,
+      /for\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/i,
+      /about\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/i,
+    ];
+    
+    for (const pattern of patterns) {
+      const match = content.match(pattern);
+      if (match) {
+        return match[0].trim();
+      }
+    }
+    return null;
+  };
+
+  const handleExportPDF = async () => {
+    // Get all chat content from the page
+    const chatArea = document.querySelector('.custom-scrollbar');
+    const chatContent = chatArea?.textContent || "";
+    
+    // Try to extract professor name from last message or full chat
+    const professorName = extractProfessorName(lastMessage || chatContent);
+    
+    if (!professorName) {
+      alert('⚠️ Tidak dapat mendeteksi nama profesor.\n\nSilakan tanyakan tentang profesor tertentu terlebih dahulu, misalnya:\n"Tell me about Prof. Dr. Riri Fitri Sari"');
+      return;
+    }
+
+    setIsExporting(true);
+    
+    try {
+      console.log('[CV Export] Generating CV for:', professorName);
+      console.log('[CV Export] Session ID:', sessionId);
+      
+      const response = await fetch("http://127.0.0.1:8000/api/generate-cv", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          professor_name: professorName,
+          session_id: sessionId || undefined
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `Server error: ${response.status}`);
+      }
+
+      // Download the PDF
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `CV_${professorName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      a.remove();
+      
+      alert(`✅ CV untuk ${professorName} berhasil didownload!`);
+
+    } catch (error: any) {
+      console.error("Error exporting CV:", error);
+      alert(`❌ Gagal generate CV: ${error.message}\n\nPastikan backend server berjalan dan nama profesor tersedia.`);
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -166,6 +243,33 @@ export default function SourcePanel({ sessionId, onPdfUploaded }: SourcePanelPro
       <p className="text-xs text-gray-500 mt-3 text-center font-medium">
         Max 10MB • PDF only
       </p>
+
+      {/* Studio Section */}
+      <hr className="border-brand-border my-6 lg:my-8" />
+      
+      <h2 className="text-lg lg:text-xl font-bold text-brand-yellow mb-4 flex items-center gap-2">
+        <FileText size={20} />
+        Studio
+      </h2>
+      
+      <button 
+        onClick={handleExportPDF}
+        className="w-full bg-brand-red text-white font-bold py-3 lg:py-4 rounded-xl hover:bg-brand-red-dark hover:shadow-lg hover:shadow-brand-red/50 transition-all duration-300 shadow-md flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-105"
+        disabled={isExporting}
+        title="Generate professional CV PDF for the professor discussed in chat"
+      >
+        {isExporting ? (
+          <>
+            <Loader2 size={18} className="animate-spin" />
+            <span className="text-sm lg:text-base">Generating CV...</span>
+          </>
+        ) : (
+          <>
+            <Download size={18} />
+            <span className="text-sm lg:text-base">Export Profile to PDF</span>
+          </>
+        )}
+      </button>
     </aside>
   );
 }

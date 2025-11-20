@@ -66,13 +66,13 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen bg-[#1A1E21] flex flex-col">
       {/* Header */}
-      <header className="border-b border-[#232B2F]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 lg:py-5">
-          <Link href="/" className="inline-block">
+      <header className="border-b border-[#2a2a2a] bg-[#1A1E21]/95 backdrop-blur-sm">
+        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-4 lg:py-6">
+          <Link href="/" className="flex items-center gap-3 transition-transform hover:scale-105">
             <img 
               src="/CheckPlease.svg" 
               alt="Check Please" 
-              className="h-[35px] sm:h-[40px] lg:h-[55px] hover:opacity-80 transition-opacity"
+              className="h-[35px] sm:h-[40px] lg:h-[55px] w-auto"
             />
           </Link>
         </div>

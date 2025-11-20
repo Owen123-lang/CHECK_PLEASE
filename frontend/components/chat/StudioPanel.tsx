@@ -1,6 +1,6 @@
 "use client";
 import React, { useState } from 'react';
-import { Download, Mail, History, BookOpen, Loader2, FileText } from 'lucide-react';
+import { Download, Loader2, FileText } from 'lucide-react';
 
 interface StudioPanelProps {
   sessionId?: string | null;
@@ -111,32 +111,6 @@ export default function StudioPanel({ sessionId, lastMessage }: StudioPanelProps
             </>
           )}
         </button>
-        
-        <button className="w-full bg-brand-dark border-2 border-brand-border text-white font-semibold py-3 lg:py-4 rounded-xl hover:border-brand-yellow/50 hover:bg-brand-container transition-all duration-300 shadow-sm flex items-center justify-center space-x-2 transform hover:scale-105">
-          <Mail size={18} />
-          <span className="text-sm lg:text-base">Draft Email to Expert</span>
-        </button>
-      </div>
-
-      <hr className="border-brand-border my-6 lg:my-8" />
-
-      <h3 className="text-base lg:text-md font-bold text-brand-yellow mb-3 lg:mb-4 flex items-center space-x-2">
-        <History size={18} />
-        <span>Search History</span>
-      </h3>
-      <div className="space-y-2 lg:space-y-3 text-sm">
-        <div className="p-3 lg:p-4 bg-brand-dark rounded-xl border border-brand-border text-gray-300 hover:border-brand-yellow/50 hover:bg-brand-container transition-all duration-300 cursor-pointer flex items-center space-x-2 transform hover:scale-105">
-            <BookOpen size={16} className="text-gray-500" />
-            <p className="truncate">"Prof. Riri Fitri Sari"</p>
-        </div>
-        <div className="p-3 lg:p-4 bg-brand-dark rounded-xl border border-brand-border text-gray-300 hover:border-brand-yellow/50 hover:bg-brand-container transition-all duration-300 cursor-pointer flex items-center space-x-2 transform hover:scale-105">
-            <BookOpen size={16} className="text-gray-500" />
-            <p className="truncate">"Dr. Muhammad Suryanegara"</p>
-        </div>
-        <div className="p-3 lg:p-4 bg-brand-dark rounded-xl border border-brand-border text-gray-300 hover:border-brand-yellow/50 hover:bg-brand-container transition-all duration-300 cursor-pointer flex items-center space-x-2 transform hover:scale-105">
-            <BookOpen size={16} className="text-gray-500" />
-            <p className="truncate">"DTE UI Professors"</p>
-        </div>
       </div>
     </aside>
   );
