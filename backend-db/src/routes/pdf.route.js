@@ -24,6 +24,7 @@ const uploadPdf = multer({
 router.post("/", authenticate, uploadPdf.any(), pdfController.createPdf);
 router.get("/", authenticate, pdfController.getAllPdfs);
 router.get("/:id", authenticate, pdfController.getPdf);
+router.put("/:id", authenticate, uploadPdf.any(), pdfController.updatePdf);
 router.delete("/:id", authenticate, pdfController.deletePdf);
 
 // Error handling middleware for Multer
