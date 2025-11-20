@@ -1,8 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Eye, EyeOff } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { API_ENDPOINTS } from '@/lib/api';
 
 export default function SignUpPage() {
   const [formData, setFormData] = useState({
@@ -15,6 +18,15 @@ export default function SignUpPage() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const { isAuthenticated } = useAuth();
+  const router = useRouter();
+
+  // Redirect if already logged in
+  useEffect(() => {
+    if (isAuthenticated) {
+      router.push('/chat');
+    }
+  }, [isAuthenticated, router]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
@@ -43,7 +55,7 @@ export default function SignUpPage() {
     }
 
     try {
-      const response = await fetch('http://localhost:4000/api/users/register', {
+      const response = await fetch(API_ENDPOINTS.REGISTER, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -60,7 +72,7 @@ export default function SignUpPage() {
       }
       
       // Redirect to login page on success
-      window.location.href = '/login';
+      router.push('/login');
     } catch (err: any) {
       setError(err.message || 'Failed to create account. Please try again.');
     } finally {

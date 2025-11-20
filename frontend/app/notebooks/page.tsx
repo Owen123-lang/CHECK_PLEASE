@@ -3,6 +3,10 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Plus, Search, Trash2, Edit2, FileText, Calendar, MoreVertical } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { authenticatedFetch } from '@/lib/auth';
+import { API_ENDPOINTS } from '@/lib/api';
+import ProtectedRoute from '@/components/auth/ProtectedRoute';
 
 interface Notebook {
   id: number;
@@ -21,6 +25,7 @@ export default function NotebooksPage() {
   const [isCreating, setIsCreating] = useState(false);
   const [editingNotebook, setEditingNotebook] = useState<Notebook | null>(null);
   const [menuOpenId, setMenuOpenId] = useState<number | null>(null);
+  const { logout } = useAuth();
 
   useEffect(() => {
     fetchNotebooks();
@@ -28,50 +33,13 @@ export default function NotebooksPage() {
 
   const fetchNotebooks = async () => {
     try {
-      const token = localStorage.getItem('token');
-      console.log('🔍 Checking token on notebooks page...');
-      console.log('🔑 Token from localStorage:', token);
-      
-      if (!token || token === 'undefined' || token === 'null') {
-        console.warn('⚠️ No valid token found, redirecting to login');
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        window.location.href = '/login';
-        return;
-      }
-
-      console.log('📡 Fetching notebooks with token...');
-      const response = await fetch('http://localhost:4000/api/notebooks', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-      console.log('📥 Notebooks API response status:', response.status);
-
-      if (response.status === 401) {
-        console.error('❌ Unauthorized (401) - Token invalid or expired');
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        window.location.href = '/login';
-        return;
-      }
-
+      const response = await authenticatedFetch(API_ENDPOINTS.NOTEBOOKS);
       const data = await response.json();
-      console.log('📦 Notebooks data received:', data);
-      
       if (data.success) {
-        console.log(`✅ Successfully loaded ${data.data?.length || 0} notebooks`);
-        setNotebooks(data.data || []);
-      } else {
-        console.warn('⚠️ Request succeeded but success flag is false');
+        setNotebooks(data.payload || []);
       }
     } catch (error) {
-      console.error('❌ Error fetching notebooks:', error);
-      console.log('🔄 Clearing tokens and redirecting to login...');
-      // If there's a network error or invalid token, redirect to login
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      window.location.href = '/login';
+      console.error('Error fetching notebooks:', error);
     } finally {
       setIsLoading(false);
     }
@@ -82,23 +50,14 @@ export default function NotebooksPage() {
 
     setIsCreating(true);
     try {
-      const token = localStorage.getItem('token');
-      console.log('📝 Creating notebook:', newNotebookTitle);
-      console.log('🔑 Using token:', token);
-      
-      const response = await fetch('http://localhost:4000/api/notebooks', {
+      const response = await authenticatedFetch(API_ENDPOINTS.NOTEBOOKS, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
         body: JSON.stringify({ title: newNotebookTitle }),
       });
-      console.log('📥 Create notebook response status:', response.status);
 
       const data = await response.json();
       if (data.success) {
-        setNotebooks([data.data, ...notebooks]);
+        setNotebooks([data.payload, ...notebooks]);
         setShowCreateModal(false);
         setNewNotebookTitle('');
       }
@@ -111,19 +70,14 @@ export default function NotebooksPage() {
 
   const handleUpdateNotebook = async (id: number, title: string) => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:4000/api/notebooks/${id}`, {
+      const response = await authenticatedFetch(API_ENDPOINTS.NOTEBOOK(id), {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
         body: JSON.stringify({ title }),
       });
 
       const data = await response.json();
       if (data.success) {
-        setNotebooks(notebooks.map(nb => nb.id === id ? data.data : nb));
+        setNotebooks(notebooks.map(nb => nb.id === id ? data.payload : nb));
         setEditingNotebook(null);
       }
     } catch (error) {
@@ -135,12 +89,8 @@ export default function NotebooksPage() {
     if (!confirm('Are you sure you want to delete this notebook?')) return;
 
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:4000/api/notebooks/${id}`, {
+      const response = await authenticatedFetch(API_ENDPOINTS.NOTEBOOK(id), {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
       });
 
       const data = await response.json();
@@ -170,7 +120,8 @@ export default function NotebooksPage() {
   );
 
   return (
-    <div className="min-h-screen bg-[#1A1E21] flex flex-col">
+    <ProtectedRoute>
+      <div className="min-h-screen bg-[#1A1E21] flex flex-col">
       {/* Header */}
       <header className="border-b border-[#232B2F] sticky top-0 bg-[#1A1E21] z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 lg:py-5 flex items-center justify-between">
@@ -189,11 +140,7 @@ export default function NotebooksPage() {
               Chat
             </Link>
             <button
-              onClick={() => {
-                localStorage.removeItem('token');
-                localStorage.removeItem('user');
-                window.location.href = '/';
-              }}
+              onClick={logout}
               className="text-sm text-gray-400 hover:text-[#FF0000] transition-colors"
             >
               Logout
@@ -389,6 +336,7 @@ export default function NotebooksPage() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </ProtectedRoute>
   );
 }

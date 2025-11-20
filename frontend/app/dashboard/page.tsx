@@ -1,12 +1,16 @@
+'use client';
+
 import React from 'react';
 import Link from 'next/link';
 import LandingHeader from "@/components/landing/LandingHeader";
+import ProtectedRoute from "@/components/auth/ProtectedRoute";
 import { Plus, BookOpen } from 'lucide-react';
 
 export default function DashboardPage() {
   return (
-    <div className="bg-black min-h-screen text-white">
-      <LandingHeader />
+    <ProtectedRoute>
+      <div className="bg-black min-h-screen text-white">
+        <LandingHeader />
       
       <main className="max-w-6xl mx-auto px-4 py-12">
         {/* Page Title */}
@@ -98,6 +102,7 @@ export default function DashboardPage() {
           </p>
         </div>
       </main>
-    </div>
+      </div>
+    </ProtectedRoute>
   );
 }
