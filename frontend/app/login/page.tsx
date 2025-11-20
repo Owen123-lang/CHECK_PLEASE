@@ -1,11 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Eye, EyeOff } from 'lucide-react';
-import { useAuth } from '@/contexts/AuthContext';
-import { API_ENDPOINTS } from '@/lib/api';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -13,15 +11,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const { login, isAuthenticated } = useAuth();
   const router = useRouter();
-
-  // Redirect if already logged in
-  useEffect(() => {
-    if (isAuthenticated) {
-      router.push('/chat');
-    }
-  }, [isAuthenticated, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,7 +19,7 @@ export default function LoginPage() {
     setError('');
 
     try {
-      const response = await fetch(API_ENDPOINTS.LOGIN, {
+      const response = await fetch('http://localhost:4000/api/users/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
@@ -41,20 +31,17 @@ export default function LoginPage() {
         throw new Error(data.message || 'Invalid email or password');
       }
 
-      // Backend returns data in "payload" property
-      const token = data.payload?.token;
-      const user = data.payload?.user;
+      // Extract token and user from payload
+      const { token, user } = data.payload;
 
-      if (!token || !user) {
-        console.error('Login response:', data);
-        throw new Error('Invalid response format from server');
-      }
-
-      // Use auth context to set authentication
-      login(token, user);
+      // Store token and user data
+      localStorage.setItem('token', token);
+      localStorage.setItem('user', JSON.stringify(user));
       
-      // Redirect to chat page on success
-      router.push('/chat');
+      console.log('Login successful, redirecting to notebooks...');
+      
+      // Use router.push for navigation
+      router.push('/notebooks');
     } catch (err: any) {
       console.error('Login error:', err);
       setError(err.message || 'Invalid email or password. Please try again.');
