@@ -5,7 +5,7 @@ import { Send, Loader2, X } from 'lucide-react';
 
 interface Message {
   id: string;
-  role: 'user' | 'assistant';
+  role: 'user' | 'chatbot';
   content: string;
   sessionId?: string;
 }
@@ -13,9 +13,28 @@ interface Message {
 interface ChatPanelProps {
   onSessionUpdate?: (sessionId: string) => void;
   onMessageUpdate?: (message: string) => void;
+  onSendMessage?: (message: string) => Promise<string | null>;
+  notebookId?: string;
+  isLoadingPreviousChats?: boolean;
+  previousChats?: PreviousChat[];
 }
 
-export default function ChatPanel({ onSessionUpdate, onMessageUpdate }: ChatPanelProps) {
+interface PreviousChat {
+  id: number;
+  notebookId: number;
+  sender: string;
+  body: string;
+  created_at: string;
+}
+
+export default function ChatPanel({ 
+  onSessionUpdate, 
+  onMessageUpdate,
+  onSendMessage,
+  notebookId, 
+  isLoadingPreviousChats = false, 
+  previousChats = [] 
+}: ChatPanelProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -29,6 +48,23 @@ export default function ChatPanel({ onSessionUpdate, onMessageUpdate }: ChatPane
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
 
+  // Load previous chats into message display
+  useEffect(() => {
+    if (previousChats && previousChats.length > 0) {
+      const loadedMessages = previousChats.map((chat) => ({
+        id: chat.id.toString(),
+        role: chat.sender === 'user' ? 'user' : 'chatbot',
+        content: chat.body,
+      }));
+      setMessages(loadedMessages);
+      scrollToBottom();
+    }
+  }, [previousChats]);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
@@ -39,61 +75,46 @@ export default function ChatPanel({ onSessionUpdate, onMessageUpdate }: ChatPane
       content: input.trim()
     };
 
-    const currentSourceUrls = sourceUrls;
     setMessages(prev => [...prev, userMessage]);
+    const userInput = input;
     setInput('');
     setSourceUrls([]);
     setIsLoading(true);
     setError(null);
 
     try {
-      const response = await fetch("http://127.0.0.1:8000/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          message: userMessage.content,
-          user_urls: currentSourceUrls.length > 0 ? currentSourceUrls : null,
-          session_id: sessionId
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Error: ${response.status} ${response.statusText}`);
+      if (!onSendMessage) {
+        throw new Error('Message handler not available');
       }
 
-      const data = await response.json();
+      // Send message and get AI response
+      const aiResponse = await onSendMessage(userInput);
       
-      // Update session ID
-      if (data.session_id) {
-        setSessionId(data.session_id);
-        onSessionUpdate?.(data.session_id);
+      if (aiResponse) {
+        const assistantMessage: Message = {
+          id: String(Date.now() + 1),
+          role: 'chatbot',
+          content: aiResponse,
+        };
+        setMessages((prev) => [...prev, assistantMessage]);
+        if (onMessageUpdate) {
+          onMessageUpdate(assistantMessage.content);
+        }
       }
-      
-      const assistantMessage: Message = {
-        id: String(Date.now() + 1),
-        role: 'assistant',
-        content: data.response || "Sorry, I couldn't get a valid response from the AI.",
-        sessionId: data.session_id
-      };
-
-      setMessages(prev => [...prev, assistantMessage]);
-      
-      // Update last assistant message for CV generation
-      onMessageUpdate?.(data.response);
-
     } catch (err: any) {
-      console.error("Full chat error object:", err);
-      const errorMessageContent = `Connection Error: Failed to fetch. Check the browser console (F12) for more details. Is the backend server running at http://127.0.0.1:8000?`;
+      console.error("Chat error:", err);
+      const errorMessageContent = `⚠️ Error: ${err.message || 'Failed to get AI response'}. Make sure the AI backend is running at http://localhost:8000`;
       setError(errorMessageContent);
       
       const errorMessage: Message = {
         id: String(Date.now() + 1),
-        role: 'assistant',
+        role: 'chatbot',
         content: errorMessageContent
       };
       setMessages(prev => [...prev, errorMessage]);
     } finally {
       setIsLoading(false);
+      scrollToBottom();
     }
   };
 
@@ -137,10 +158,10 @@ export default function ChatPanel({ onSessionUpdate, onMessageUpdate }: ChatPane
               <div className={`p-3 lg:p-4 rounded-2xl shadow-lg max-w-[85%] lg:max-w-2xl break-words whitespace-pre-wrap ${
                 m.role === 'user' 
                   ? 'bg-brand-red text-white' 
-                  : 'bg-brand-container text-gray-200 border border-brand-border'
+                  : 'bg-brand-container text-white border border-brand-border'
               }`}>
-                {m.role === 'assistant' ? (
-                  <div dangerouslySetInnerHTML={{ __html: m.content }} />
+                {m.role === 'chatbot' ? (
+                  <div className="[&_*]:text-white" dangerouslySetInnerHTML={{ __html: m.content }} />
                 ) : (
                   m.content
                 )}
@@ -215,14 +236,14 @@ export default function ChatPanel({ onSessionUpdate, onMessageUpdate }: ChatPane
               <input
                 className="flex-1 bg-transparent text-white placeholder-gray-500 outline-none px-3 lg:px-4 py-2 lg:py-3 text-sm lg:text-base"
                 value={input}
-                placeholder="Search for an academic expert (e.g., Prof. Riri Fitri Sari)..."
+                placeholder={notebookId ? "Search for an academic expert (e.g., Prof. Riri Fitri Sari)..." : "Select a notebook first..."}
                 onChange={(e) => setInput(e.target.value)}
-                disabled={isLoading}
+                disabled={isLoading || !notebookId}
               />
               <button 
                 type="submit" 
                 className="bg-brand-yellow text-[#1A1E21] font-bold py-2 lg:py-3 px-4 lg:px-6 rounded-xl hover:bg-brand-yellow-dark hover:shadow-lg hover:shadow-brand-yellow/50 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2 text-sm lg:text-base"
-                disabled={isLoading}
+                disabled={isLoading || !notebookId}
               >
                 <Send size={18} /> <span className="hidden sm:inline">Send</span>
               </button>

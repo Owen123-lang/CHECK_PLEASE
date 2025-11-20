@@ -1,15 +1,31 @@
 "use client";
 
-import { FileText, Plus, Upload, X, CheckCircle, Loader2, Download } from 'lucide-react';
+import { FileText, Plus, Upload, X, CheckCircle, Loader2, Download, FileUp, Trash2, MessageCircle } from 'lucide-react';
 import { useState, useRef } from 'react';
+
+interface PreviousChat {
+  id: number;
+  notebookId: number;
+  sender: string;
+  body: string;
+  created_at: string;
+}
 
 interface SourcePanelProps {
   sessionId?: string | null;
   lastMessage?: string | null;
   onPdfUploaded?: (filename: string) => void;
+  notebookId?: string;
+  previousChats?: PreviousChat[];
 }
 
-export default function SourcePanel({ sessionId, lastMessage, onPdfUploaded }: SourcePanelProps) {
+export default function SourcePanel({ 
+  sessionId, 
+  lastMessage, 
+  onPdfUploaded, 
+  notebookId, 
+  previousChats = [] 
+}: SourcePanelProps) {
   const [uploadedPdfs, setUploadedPdfs] = useState<string[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);

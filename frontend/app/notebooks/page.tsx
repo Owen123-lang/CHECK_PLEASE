@@ -4,16 +4,14 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Plus, Search, Trash2, Edit2, FileText, Calendar, MoreVertical } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { authenticatedFetch } from '@/lib/auth';
-import { API_ENDPOINTS } from '@/lib/api';
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
 
 interface Notebook {
-  id: number;
+  id: string;
+  user_id: string;
   title: string;
-  user_id: number;
   created_at: string;
-  updated_at: string;
+  updated_at?: string;
 }
 
 export default function NotebooksPage() {
@@ -24,16 +22,27 @@ export default function NotebooksPage() {
   const [newNotebookTitle, setNewNotebookTitle] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [editingNotebook, setEditingNotebook] = useState<Notebook | null>(null);
-  const [menuOpenId, setMenuOpenId] = useState<number | null>(null);
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const { logout } = useAuth();
 
   useEffect(() => {
     fetchNotebooks();
   }, []);
 
+  const getAuthToken = () => {
+    return localStorage.getItem('token');
+  };
+
   const fetchNotebooks = async () => {
     try {
-      const response = await authenticatedFetch(API_ENDPOINTS.NOTEBOOKS);
+      const token = getAuthToken();
+      const response = await fetch('http://localhost:4000/api/notebooks', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
       const data = await response.json();
       if (data.success) {
         setNotebooks(data.payload || []);
@@ -50,8 +59,13 @@ export default function NotebooksPage() {
 
     setIsCreating(true);
     try {
-      const response = await authenticatedFetch(API_ENDPOINTS.NOTEBOOKS, {
+      const token = getAuthToken();
+      const response = await fetch('http://localhost:4000/api/notebooks', {
         method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({ title: newNotebookTitle }),
       });
 
@@ -68,10 +82,15 @@ export default function NotebooksPage() {
     }
   };
 
-  const handleUpdateNotebook = async (id: number, title: string) => {
+  const handleUpdateNotebook = async (id: string, title: string) => {
     try {
-      const response = await authenticatedFetch(API_ENDPOINTS.NOTEBOOK(id), {
+      const token = getAuthToken();
+      const response = await fetch(`http://localhost:4000/api/notebooks/${id}`, {
         method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({ title }),
       });
 
@@ -85,12 +104,17 @@ export default function NotebooksPage() {
     }
   };
 
-  const handleDeleteNotebook = async (id: number) => {
+  const handleDeleteNotebook = async (id: string) => {
     if (!confirm('Are you sure you want to delete this notebook?')) return;
 
     try {
-      const response = await authenticatedFetch(API_ENDPOINTS.NOTEBOOK(id), {
+      const token = getAuthToken();
+      const response = await fetch(`http://localhost:4000/api/notebooks/${id}`, {
         method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
       });
 
       const data = await response.json();
@@ -257,7 +281,7 @@ export default function NotebooksPage() {
                   </Link>
                   <div className="flex items-center gap-2 text-sm text-gray-400">
                     <Calendar className="w-4 h-4" />
-                    <span>{formatDate(notebook.updated_at)}</span>
+                    <span>{formatDate(notebook.created_at)}</span>
                   </div>
                 </div>
               </div>

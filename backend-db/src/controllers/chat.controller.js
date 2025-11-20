@@ -4,6 +4,10 @@ const baseResponse = require("../utils/baseResponse.util");
 exports.createChat = async (req, res) => {
     const { notebookId, sender, body } = req.body;
 
+    if (!notebookId || !sender || !body) {
+        return baseResponse(res, false, 400, "Missing required fields: notebookId, sender, body", null);
+    }
+
     try {
         const chat = await chatRepository.createChat(notebookId, sender, body);
 
