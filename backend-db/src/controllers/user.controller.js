@@ -103,7 +103,7 @@ exports.loginUser = async (req, res) => {
       role: user.role,
     });
 
-    return res.json({
+    return baseResponse(res, true, 200, "Login successful", {
       token,
       user: {
         id: user.id,
