@@ -29,18 +29,27 @@ export default function NotebooksPage() {
   const fetchNotebooks = async () => {
     try {
       const token = localStorage.getItem('token');
-      if (!token) {
+      console.log('🔍 Checking token on notebooks page...');
+      console.log('🔑 Token from localStorage:', token);
+      
+      if (!token || token === 'undefined' || token === 'null') {
+        console.warn('⚠️ No valid token found, redirecting to login');
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
         window.location.href = '/login';
         return;
       }
 
-      const response = await fetch('http://localhost:3000/api/notebooks', {
+      console.log('📡 Fetching notebooks with token...');
+      const response = await fetch('http://localhost:4000/api/notebooks', {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
       });
+      console.log('📥 Notebooks API response status:', response.status);
 
       if (response.status === 401) {
+        console.error('❌ Unauthorized (401) - Token invalid or expired');
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         window.location.href = '/login';
@@ -48,11 +57,21 @@ export default function NotebooksPage() {
       }
 
       const data = await response.json();
+      console.log('📦 Notebooks data received:', data);
+      
       if (data.success) {
+        console.log(`✅ Successfully loaded ${data.data?.length || 0} notebooks`);
         setNotebooks(data.data || []);
+      } else {
+        console.warn('⚠️ Request succeeded but success flag is false');
       }
     } catch (error) {
-      console.error('Error fetching notebooks:', error);
+      console.error('❌ Error fetching notebooks:', error);
+      console.log('🔄 Clearing tokens and redirecting to login...');
+      // If there's a network error or invalid token, redirect to login
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.href = '/login';
     } finally {
       setIsLoading(false);
     }
@@ -64,7 +83,10 @@ export default function NotebooksPage() {
     setIsCreating(true);
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:3000/api/notebooks', {
+      console.log('📝 Creating notebook:', newNotebookTitle);
+      console.log('🔑 Using token:', token);
+      
+      const response = await fetch('http://localhost:4000/api/notebooks', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -72,6 +94,7 @@ export default function NotebooksPage() {
         },
         body: JSON.stringify({ title: newNotebookTitle }),
       });
+      console.log('📥 Create notebook response status:', response.status);
 
       const data = await response.json();
       if (data.success) {
@@ -89,7 +112,7 @@ export default function NotebooksPage() {
   const handleUpdateNotebook = async (id: number, title: string) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:3000/api/notebooks/${id}`, {
+      const response = await fetch(`http://localhost:4000/api/notebooks/${id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -113,7 +136,7 @@ export default function NotebooksPage() {
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:3000/api/notebooks/${id}`, {
+      const response = await fetch(`http://localhost:4000/api/notebooks/${id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
