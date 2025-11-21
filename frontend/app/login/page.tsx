@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Eye, EyeOff } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -12,6 +13,7 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const router = useRouter();
+  const { login } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,18 +36,23 @@ export default function LoginPage() {
       // Extract token and user from payload
       const { token, user } = data.payload;
 
-      // Store token and user data
-      localStorage.setItem('token', token);
-      localStorage.setItem('user', JSON.stringify(user));
+      // Validate that we received both token and user
+      if (!token || !user) {
+        throw new Error('Invalid response from server');
+      }
+
+      console.log('Login successful, updating auth context...');
       
-      console.log('Login successful, redirecting to notebooks...');
+      // Update AuthContext which will also update localStorage
+      login(token, user);
       
-      // Use router.push for navigation
+      console.log('Auth context updated, redirecting to notebooks...');
+      
+      // Navigate to notebooks page
       router.push('/notebooks');
     } catch (err: any) {
       console.error('Login error:', err);
       setError(err.message || 'Invalid email or password. Please try again.');
-    } finally {
       setIsLoading(false);
     }
   };
@@ -137,23 +144,6 @@ export default function LoginPage() {
                     )}
                   </button>
                 </div>
-              </div>
-
-              {/* Remember Me & Forgot Password */}
-              <div className="flex items-center justify-between text-sm">
-                <label className="flex items-center text-gray-400 cursor-pointer hover:text-white transition-colors">
-                  <input
-                    type="checkbox"
-                    className="mr-2 w-4 h-4 rounded border-[#2A3339] bg-[#1A1E21] text-[#FFFF00] focus:ring-[#FFFF00] focus:ring-offset-0"
-                  />
-                  Remember me
-                </label>
-                <Link 
-                  href="/forgot-password" 
-                  className="text-[#FFFF00] hover:text-[#FFD700] transition-colors"
-                >
-                  Forgot password?
-                </Link>
               </div>
 
               {/* Submit Button */}
