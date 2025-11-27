@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Header from "@/components/chat/Header";
 import SourcePanel from "@/components/chat/SourcePanel";
@@ -15,7 +15,7 @@ interface PreviousChat {
   created_at: string;
 }
 
-export default function Home() {
+function ChatPageContent() {
   const searchParams = useSearchParams();
   const notebookId = searchParams.get("notebook");
   
@@ -189,5 +189,17 @@ export default function Home() {
         </main>
       </div>
     </ProtectedRoute>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center h-screen bg-brand-dark">
+        <div className="text-brand-yellow text-xl">Loading...</div>
+      </div>
+    }>
+      <ChatPageContent />
+    </Suspense>
   );
 }
