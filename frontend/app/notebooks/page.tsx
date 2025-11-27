@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Plus, Search, Trash2, Edit2, FileText, Calendar, MoreVertical } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
+import { API_ENDPOINTS } from '@/lib/api';
 
 interface Notebook {
   id: string;
@@ -36,7 +37,7 @@ export default function NotebooksPage() {
   const fetchNotebooks = async () => {
     try {
       const token = getAuthToken();
-      const response = await fetch('http://localhost:4000/api/notebooks', {
+      const response = await fetch(API_ENDPOINTS.NOTEBOOKS, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -60,7 +61,7 @@ export default function NotebooksPage() {
     setIsCreating(true);
     try {
       const token = getAuthToken();
-      const response = await fetch('http://localhost:4000/api/notebooks', {
+      const response = await fetch(API_ENDPOINTS.NOTEBOOKS, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -85,7 +86,7 @@ export default function NotebooksPage() {
   const handleUpdateNotebook = async (id: string, title: string) => {
     try {
       const token = getAuthToken();
-      const response = await fetch(`http://localhost:4000/api/notebooks/${id}`, {
+      const response = await fetch(API_ENDPOINTS.NOTEBOOK(Number(id)), {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -109,7 +110,7 @@ export default function NotebooksPage() {
 
     try {
       const token = getAuthToken();
-      const response = await fetch(`http://localhost:4000/api/notebooks/${id}`, {
+      const response = await fetch(API_ENDPOINTS.NOTEBOOK(Number(id)), {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,

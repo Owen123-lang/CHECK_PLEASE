@@ -6,6 +6,7 @@ import Header from "@/components/chat/Header";
 import SourcePanel from "@/components/chat/SourcePanel";
 import ChatPanel from "@/components/chat/ChatPanel";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
+import { API_ENDPOINTS } from "@/lib/api";
 
 interface PreviousChat {
   id: number;
@@ -44,7 +45,7 @@ function ChatPageContent() {
     try {
       const token = getAuthToken();
       const response = await fetch(
-        `http://localhost:4000/api/chat/notebook/${notebookId}`,
+        API_ENDPOINTS.CHAT_NOTEBOOK(notebookId),
         {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -71,7 +72,7 @@ function ChatPageContent() {
     try {
       const token = getAuthToken();
       const response = await fetch(
-        `http://localhost:4000/api/notebooks/${notebookId}`,
+        API_ENDPOINTS.NOTEBOOK(Number(notebookId)),
         {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -96,7 +97,7 @@ function ChatPageContent() {
       const token = getAuthToken();
 
       // Step 1: Save user message to database
-      const userResponse = await fetch('http://localhost:4000/api/chat', {
+      const userResponse = await fetch(API_ENDPOINTS.CHAT, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -116,7 +117,7 @@ function ChatPageContent() {
 
       // Step 2: Send to AI backend (port 8000) for processing
       console.log('Sending to AI backend:', userMessage);
-      const aiResponse = await fetch('http://localhost:8000/api/chat', {
+      const aiResponse = await fetch(API_ENDPOINTS.AI_CHAT, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -131,7 +132,7 @@ function ChatPageContent() {
       const assistantResponse = aiData.response || aiData.message || 'No response from AI';
 
       // Step 3: Save AI response to database
-      const assistantSaveResponse = await fetch('http://localhost:4000/api/chat', {
+      const assistantSaveResponse = await fetch(API_ENDPOINTS.CHAT, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

@@ -1,5 +1,6 @@
 // API configuration
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+export const AI_API_BASE_URL = process.env.NEXT_PUBLIC_AI_API_URL || 'http://localhost:8000';
 
 export const API_ENDPOINTS = {
   // User endpoints
@@ -14,6 +15,10 @@ export const API_ENDPOINTS = {
   // Chat endpoints
   CHAT: `${API_BASE_URL}/api/chat`,
   CHAT_SESSION: (sessionId: string) => `${API_BASE_URL}/api/chat/${sessionId}`,
+  CHAT_NOTEBOOK: (notebookId: string) => `${API_BASE_URL}/api/chat/notebook/${notebookId}`,
+  
+  // AI endpoints
+  AI_CHAT: `${AI_API_BASE_URL}/api/chat`,
   
   // PDF endpoints
   PDF: `${API_BASE_URL}/api/pdf`,
