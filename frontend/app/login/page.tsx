@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { API_ENDPOINTS } from '@/lib/api';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -21,7 +22,7 @@ export default function LoginPage() {
     setError('');
 
     try {
-      const response = await fetch('http://localhost:4000/api/users/login', {
+      const response = await fetch(API_ENDPOINTS.LOGIN, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
