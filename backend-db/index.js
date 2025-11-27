@@ -16,6 +16,7 @@ const cors = require("cors");
 const corsOptions = {
   origin: [
     "http://localhost:3000",
+    "https://check-please-gray.vercel.app",
   ],
   methods: ["GET", "POST", "PUT", "DELETE"],
   credentials: true,
