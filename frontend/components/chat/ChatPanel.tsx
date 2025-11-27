@@ -51,9 +51,9 @@ export default function ChatPanel({
   // Load previous chats into message display
   useEffect(() => {
     if (previousChats && previousChats.length > 0) {
-      const loadedMessages = previousChats.map((chat) => ({
+      const loadedMessages: Message[] = previousChats.map((chat) => ({
         id: chat.id.toString(),
-        role: chat.sender === 'user' ? 'user' : 'chatbot',
+        role: (chat.sender === 'user' ? 'user' : 'chatbot') as 'user' | 'chatbot',
         content: chat.body,
       }));
       setMessages(loadedMessages);
