@@ -716,13 +716,17 @@ Answer concisely with ONLY academic and professional information:"""
             
             result = crew.kickoff()
             
-            # Extract result
+            # Extract result - ONLY get the Final Answer, not the thinking process
             if hasattr(result, 'raw'):
                 output = str(result.raw)
             elif hasattr(result, 'output'):
                 output = str(result.output)
             else:
                 output = str(result)
+            
+            # CRITICAL FIX: Remove all thinking process (Thought, Action, Observation)
+            # Only keep the Final Answer section
+            output = self._extract_final_answer_only(output)
             
             print(f"  ✓ CrewAI completed, output: {len(output)} characters")
             return output
@@ -757,6 +761,80 @@ Answer concisely with ONLY academic and professional information:"""
             cleaned = cleaned[:8000] + "\n\n[Context truncated - focusing on most relevant publications]"
         
         return cleaned
+    
+    def _extract_final_answer_only(self, crewai_output: str) -> str:
+        """
+        🎯 CRITICAL: Extract ONLY the Final Answer from CrewAI output.
+        Remove all thinking process (Thought, Action, Observation, etc.)
+        
+        CrewAI output format:
+        Thought
+        The user is asking...
+        Action
+        Academic Search Tool
+        Action Input:
+        {...}
+        Observation
+        Found result...
+        Thought
+        I will now...
+        Final Answer
+        **Dr. Wa Ode Zusnita Muizu, S.E., M.Sc.**
+        ...
+        
+        We only want the "Final Answer" part!
+        """
+        print("[FORMATTING] Extracting Final Answer only...")
+        
+        # Strategy 1: Look for "Final Answer" marker (most reliable)
+        if "Final Answer" in crewai_output or "final answer" in crewai_output.lower():
+            # Find the last occurrence of "Final Answer" (case-insensitive)
+            parts = re.split(r'(?i)final\s+answer[:\s]*', crewai_output)
+            if len(parts) > 1:
+                final_answer = parts[-1].strip()
+                print(f"  ✓ Extracted Final Answer ({len(final_answer)} chars)")
+                return final_answer
+        
+        # Strategy 2: Remove common thinking markers
+        thinking_markers = [
+            r'Thought\s*\n[^\n]+',
+            r'Action\s*\n[^\n]+',
+            r'Action Input:\s*\n```json[\s\S]*?```',
+            r'Observation\s*\n[^\n]+',
+            r'I will (now|start|begin)[^\n]+',
+            r'The (user|query) (is|are) (asking|requesting)[^\n]+',
+            r'I have gathered[^\n]+',
+            r'```json[\s\S]*?```',
+        ]
+        
+        cleaned = crewai_output
+        for marker in thinking_markers:
+            cleaned = re.sub(marker, '', cleaned, flags=re.IGNORECASE)
+        
+        # Strategy 3: If output starts with markdown header or bold text, it's likely the answer
+        lines = cleaned.split('\n')
+        answer_lines = []
+        found_content = False
+        
+        for line in lines:
+            stripped = line.strip()
+            # Skip empty lines at the beginning
+            if not found_content and not stripped:
+                continue
+            # Start collecting from first meaningful content
+            if stripped and (stripped.startswith('**') or stripped.startswith('#') or stripped.startswith('*')):
+                found_content = True
+            if found_content:
+                answer_lines.append(line)
+        
+        if answer_lines:
+            result = '\n'.join(answer_lines).strip()
+            print(f"  ✓ Cleaned output ({len(result)} chars)")
+            return result
+        
+        # Fallback: Return cleaned version
+        print(f"  ⚠️ Could not find clear Final Answer marker, returning cleaned version")
+        return cleaned.strip()
 
 # Singleton
 _rag = None

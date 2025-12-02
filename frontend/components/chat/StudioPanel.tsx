@@ -50,10 +50,16 @@ export default function StudioPanel({ sessionId, lastMessage }: StudioPanelProps
       console.log('[CV Export] Generating CV for:', professorName);
       console.log('[CV Export] Session ID:', sessionId);
       
-      const response = await fetch("http://127.0.0.1:8000/api/generate-cv", {
+      // Use environment variable for AI backend URL
+      const aiBackendUrl = process.env.NEXT_PUBLIC_AI_API_URL || 'http://localhost:8000';
+      const cvEndpoint = `${aiBackendUrl}/api/generate-cv`;
+      
+      console.log('[CV Export] Calling endpoint:', cvEndpoint);
+      
+      const response = await fetch(cvEndpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           professor_name: professorName,
           session_id: sessionId || undefined
         }),
