@@ -146,7 +146,7 @@ Create a detailed CV using this EXACT structure:
 - **Affiliation**: [Extract university name - usually Universitas Indonesia]
 - **Department**: [Extract full department name if mentioned, e.g., "Departemen Teknik Elektro"]
 - **Born**: [Extract birth date and place if available, e.g., "Jakarta, 15 Maret 1980"]
-- **Email**: [Extract email address if found]
+- **Email**: [Extract email address if found. Format as: name[at]ui.ac.id or full email]
 - **Phone**: [Extract phone number if found]
 - **Office**: [Extract office location/room if mentioned]
 - **SINTA ID**: [Extract SINTA ID if found]
@@ -197,28 +197,44 @@ If no research areas found: "- Research interests not available in sources"
 
 ## PUBLICATIONS & SCHOLARLY WORKS
 
+**CRITICAL VALIDATION RULE FOR PUBLICATIONS:**
+- **Extract publications from BOTH the DATABASE INFORMATION section AND the GOOGLE SCHOLAR PUBLICATIONS section**
+- **ONLY include publications where the person's name ({professor_name}) appears in the author list**
+- **CHECK CAREFULLY**: Each publication must be authored or co-authored by {professor_name}
+- **DO NOT include publications from other people with similar names**
+- **DO NOT include publications that are just mentioned as references or citations**
+- **If the author list doesn't explicitly contain {professor_name} or their surname, SKIP that publication**
+
 ### Journal Articles
-[List ALL journal publications found. Include full details:]
+[List ONLY journal publications where {professor_name} is an author. Extract from BOTH database and scholar data. Format each as:]
 - **[Complete Paper Title]**
-  - Authors: [All authors names]
+  - Authors: [{professor_name}'s name or surname must be in this list]
   - Journal: [Journal name]
   - Year: [Publication year]
   - DOI/Link: [If available]
   - Citations: [Number if available]
 
 ### Conference Papers
-[List ALL conference papers found:]
+[List ONLY conference papers where {professor_name} is an author. Extract from BOTH database and scholar data:]
 - **[Complete Paper Title]**
-  - Authors: [All authors]
+  - Authors: [{professor_name}'s name or surname must be in this list]
   - Conference: [Full conference name]
   - Location: [City, Country if available]
   - Year: [Year]
   - Citations: [Number if available]
 
 ### Books & Book Chapters
-[If any books or book chapters are mentioned, list them here]
+[If any books or book chapters are mentioned where {professor_name} is an author, list them here]
 
-**NOTE**: Extract publication titles from the Google Scholar data. List at least 10-15 publications if available. Include as many as you can find.
+**EXTRACTION INSTRUCTIONS**:
+1. **First**, look through the DATABASE INFORMATION section for publication titles, paper names, or research output
+2. **Second**, look through the GOOGLE SCHOLAR PUBLICATIONS section
+3. For EACH publication found, verify that {professor_name}'s surname appears in the author list
+4. Only extract publications that are CLEARLY authored or co-authored by {professor_name}
+5. If you see a publication title but NO author list, try to verify it belongs to {professor_name} from context
+6. If unsure whether a publication belongs to this person, SKIP it
+7. List at least 10-15 VERIFIED publications if available from both sources combined
+8. Better to have fewer accurate publications than many irrelevant ones
 
 If no publications found: "- Publications not available in sources"
 

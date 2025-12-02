@@ -121,8 +121,10 @@ def parse_markdown_cv(markdown_text: str) -> dict:
                 birth = line.split(':', 1)[1].strip() if ':' in line else ''
                 if is_valid_data(birth):
                     cv_data['birth_info'] = birth
-            elif line.startswith('- **Email'):
+            elif line.startswith('- **Email') or line.startswith('- Email:'):
                 email = line.split(':', 1)[1].strip() if ':' in line else ''
+                # Convert [at] to @
+                email = email.replace('[at]', '@').replace('[ at ]', '@').replace(' [at] ', '@')
                 if is_valid_data(email):
                     cv_data['email'] = email
         
