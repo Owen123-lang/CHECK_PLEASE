@@ -63,21 +63,21 @@ For EACH publication you find, extract:
 - Has year
 - Has venue (journal/conference)
 
-**STEP 4: Format**
+**STEP 4: Format** (NON-NEGOTIABLE - MUST INCLUDE YEAR!)
 For each valid publication:
 
 **Journal:**
 - **[FULL PAPER TITLE]**
   - Authors: [Author1, Author2, Author3, ...]
   - Journal: [Journal Name]
-  - Year: [YYYY]
+  - Year: [YYYY] 🚨 REQUIRED - DO NOT SKIP
   - Source: [ENG.UI.AC.ID / UI Scholar / Google Scholar]
 
 **Conference:**
 - **[FULL PAPER TITLE]**
   - Authors: [Author1, Author2, ...]
   - Conference: [Conference Name with Location]
-  - Year: [YYYY]
+  - Year: [YYYY] 🚨 REQUIRED - DO NOT SKIP
   - Source: [ENG.UI.AC.ID / UI Scholar / Google Scholar]
 
 **EXAMPLES OF CORRECT EXTRACTION:**
@@ -136,16 +136,22 @@ For each valid publication:
 
 ## SELECTED PUBLICATIONS
 
-[List 10-15 publications following the format above]
+🚨 **CRITICAL REQUIREMENTS:**
+- Extract MINIMUM 10 complete publications from sources
+- EVERY publication MUST have ALL FOUR fields: Title, Authors, Year, Venue
+- Year is MANDATORY - reject publications without years
+- NO "Source: ENG.UI.AC.ID" entries without actual paper titles
+
+[Now list 10-15 publications in the exact format shown above]
 
 ---
 
-**FINAL CHECKLIST BEFORE SUBMITTING:**
+**MANDATORY VALIDATION BEFORE SUBMISSION:**
+🛑 STOP if any publication is missing Year field
+🛑 STOP if any publication is just "Source: ENG.UI.AC.ID"
+🛑 STOP if fewer than 10 publications extracted
+✅ PROCEED only if ALL publications have 4 complete fields
 ✅ Education section has 3 entries (Bachelor/Master/Doctoral)
-✅ Publications section has 10+ entries
-✅ EVERY publication has: Title + Authors + Year + Venue
-✅ NO publication is just "Source: ENG.UI.AC.ID" alone
-✅ NO publication is just "Conference name" without paper title
 ✅ Email uses @ symbol (not [at])
 
-Generate the CV now with COMPLETE publication data:"""
+NOW extract the CV with MINIMUM 10 complete publications including years:"""
