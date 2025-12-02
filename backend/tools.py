@@ -1132,6 +1132,15 @@ class PDFSearchTool(BaseTool):
 
     def _run(self, query: str, session_id: str = None) -> str:
         """Search through uploaded PDF content stored in database with optional session filtering."""
+        # Import session context from agent_core
+        from agent_core import get_session_context
+        
+        # If session_id not provided, try to get it from global context
+        if not session_id:
+            session_id = get_session_context()
+            if session_id:
+                print(f"[PDF_SEARCH] Using session_id from global context: {session_id}")
+        
         if embeddings is None:
             return "Error: Embedding model failed to initialize."
             

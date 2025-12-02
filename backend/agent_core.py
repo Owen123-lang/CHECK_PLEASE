@@ -593,7 +593,11 @@ Please try again with a more specific question!"""
                     "6. ONLY include: academic credentials, professional positions, research, publications, awards\n"
                     "7. IMPORTANT: Pay attention to conversation history to understand pronouns like 'his/her/their'\n"
                     "8. CRITICAL: When asked for publications, extract ALL publications mentioned in the context data\n"
-                    "9. **NEW: When user asks about PDF/document they uploaded, use 'User PDF Search Tool' to find information**\n"
+                    "9. **CRITICAL: When user asks about PDF/document they uploaded:**\n"
+                    "   - Use 'User PDF Search Tool' immediately\n"
+                    "   - The tool will automatically use the correct session_id\n"
+                    "   - DO NOT return JSON format - return actual human-readable text\n"
+                    "   - Summarize the PDF content in Indonesian language\n"
                     "10. **CRITICAL: If database/Scholar returns empty or irrelevant results, provide a helpful error message immediately - DO NOT keep trying**\n"
                 ),
                 tools=[
@@ -624,31 +628,18 @@ Please try again with a more specific question!"""
             if is_pdf_query:
                 task_description = f"""USER QUERY: "{query}"
 
-**MANDATORY ACTION - YOU MUST DO THIS:**
+**YOUR TASK:**
+1. Execute the 'User PDF Search Tool' with query: "{query}"
+2. Summarize the PDF content found in Indonesian language
+3. Format the answer nicely with headers and bullet points
 
-STEP 1: Use the 'User PDF Search Tool' with this exact search query: "{query}"
-STEP 2: Read the results from the tool
-STEP 3: Summarize the PDF content in Indonesian
+**IMPORTANT RULES:**
+- You MUST use the PDF Search Tool to get the content
+- DO NOT return JSON - return actual formatted text
+- Summarize in Indonesian language
+- Keep the answer clear and well-structured
 
-**OUTPUT FORMAT (use this exactly):**
-
-# Ringkasan Dokumen PDF
-
-## 📄 Informasi Utama
-[Main information from PDF]
-
-## 🔑 Poin-Poin Penting
-1. [Point 1]
-2. [Point 2]
-3. [Point 3]
-
-## 💡 Detail Lengkap
-[Full details from the PDF]
-
----
-**Sumber:** PDF yang Anda upload
-
-**CRITICAL:** You CANNOT answer without using the PDF Search Tool first. Execute it NOW."""
+Start by using the PDF Search Tool NOW."""
             elif is_publication_query:
                 task_description = f"""{context_prefix}Answer: "{query}"
 
