@@ -1056,6 +1056,62 @@ scholar.ui.ac.id blocks automated search queries but allows direct page access."
 3. **Try Google Scholar Search Tool** for broader publication search"""
 
 
+# ========== ENG.UI.AC.ID PERSONNEL SCRAPER TOOL (NEW!) ==========
+class EngUIPersonnelInput(BaseModel):
+    """Input schema for ENG.UI.AC.ID Personnel Scraper Tool."""
+    professor_name: str = Field(..., description="Name of the professor/lecturer (e.g., 'Mia Rizkinia', 'Abdul Muis', 'Riri Fitri Sari')")
+
+
+class EngUIPersonnelScraperTool(BaseTool):
+    name: str = "ENG.UI.AC.ID Personnel Page Scraper"
+    description: str = (
+        "Scrapes official personnel pages from eng.ui.ac.id (Faculty of Engineering UI website). "
+        "This is the OFFICIAL source for: Education history, Research expertise, Latest publications, Position/title. "
+        "Use this tool when user asks about a specific professor from UI Electrical Engineering department. "
+        "Returns: Complete education history (Bachelor/Master/Doctoral with universities and years), "
+        "Research interests, Latest 3-5 publications with titles and years, Academic position."
+    )
+    args_schema: Type[BaseModel] = EngUIPersonnelInput
+
+    def _run(self, professor_name: str) -> str:
+        """Scrape eng.ui.ac.id personnel page for comprehensive professor data."""
+        print(f"\n[ENG_UI_SCRAPER] Scraping personnel page for: {professor_name}")
+        
+        try:
+            # Import scraper function
+            from eng_ui_scraper import scrape_eng_ui_personnel, format_eng_ui_data
+            
+            # Scrape the page
+            data = scrape_eng_ui_personnel(professor_name)
+            
+            if not data:
+                return f"""⚠️ **Personnel page not found for '{professor_name}'** on eng.ui.ac.id
+
+**Possible reasons:**
+1. Name spelling might be different on the website
+2. Professor might not have a page yet
+3. Page might be under a different URL structure
+
+**Recommendations:**
+- Try variations of the name (with/without title, middle name)
+- Use 'Web Search Tool' to find their information
+- Check the full faculty directory: https://eng.ui.ac.id/personnel/"""
+            
+            # Format the data into readable output
+            formatted_output = format_eng_ui_data(data)
+            
+            print(f"[ENG_UI_SCRAPER] ✅ Successfully scraped {len(formatted_output)} chars")
+            return formatted_output
+            
+        except ImportError as e:
+            error_msg = f"❌ Error: eng_ui_scraper module not found. {str(e)}"
+            print(f"[ENG_UI_SCRAPER] {error_msg}")
+            return error_msg
+        except Exception as e:
+            error_msg = f"❌ Unexpected error scraping eng.ui.ac.id: {type(e).__name__} - {str(e)}"
+            print(f"[ENG_UI_SCRAPER] {error_msg}")
+            return error_msg
+
 # ========== PDF SEARCH TOOL (USER UPLOADED) ==========
 class PDFSearchInput(BaseModel):
     """Input schema for PDF Search Tool."""
@@ -1145,4 +1201,5 @@ google_scholar_cited_by_tool = GoogleScholarCitedByTool()
 # sinta_scraper_tool removed - use ui_scholar_search_tool instead
 cv_generator_tool = CVGeneratorTool()
 ui_scholar_search_tool = UIScholarSearchTool()
+eng_ui_personnel_scraper_tool = EngUIPersonnelScraperTool()  # NEW: ENG.UI.AC.ID scraper
 pdf_search_tool = PDFSearchTool()  # New PDF search tool

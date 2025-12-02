@@ -11,7 +11,8 @@ from tools import (
     google_scholar_tool,
     web_search_tool,
     dynamic_web_scraper_tool,
-    ui_scholar_search_tool  # Add UI Scholar tool
+    ui_scholar_search_tool,  # Add UI Scholar tool
+    eng_ui_personnel_scraper_tool  # NEW: Official eng.ui.ac.id personnel scraper
 )
 import re
 
@@ -88,14 +89,26 @@ def simplified_cv_generation(professor_name: str, session_id: str = None) -> dic
     print("="*80)
     
     collected_data = {
+        'eng_ui_personnel': None,  # NEW: Official eng.ui.ac.id personnel page (HIGHEST PRIORITY)
         'database': None,
         'ui_scholar': None,  # Add UI Scholar data
         'scholar': None,
         'raw_info': {}
     }
     
+    # Step 0: Try to get official data from eng.ui.ac.id FIRST (highest priority)
+    print("\n[0/5] 🌐 Collecting OFFICIAL data from eng.ui.ac.id personnel page...")
+    try:
+        eng_ui_result = eng_ui_personnel_scraper_tool._run(professor_name)
+        collected_data['eng_ui_personnel'] = clean_tool_output(eng_ui_result, 3500)
+        print(f"  ✓ ENG.UI.AC.ID: {len(eng_ui_result)} chars → {len(collected_data['eng_ui_personnel'])} chars (cleaned)")
+        print(f"  📋 This is the AUTHORITATIVE source for education, research expertise, and latest publications")
+    except Exception as e:
+        print(f"  ✗ ENG.UI.AC.ID error: {e}")
+        print(f"  ⚠️ Will use fallback sources (database, UI Scholar, Google Scholar)")
+    
     # Step 1: Collect data from tools with error handling
-    print("\n[1/4] Collecting data from Academic Database...")
+    print("\n[1/5] Collecting data from Academic Database...")
     try:
         db_result = academic_search_tool._run(professor_name)
         # Keep MORE data from database - increase from 1000 to 3000 chars
@@ -105,7 +118,7 @@ def simplified_cv_generation(professor_name: str, session_id: str = None) -> dic
     except Exception as e:
         print(f"  ✗ Database error: {e}")
     
-    print("\n[2/4] Collecting data from UI Scholar (scholar.ui.ac.id)...")
+    print("\n[2/5] Collecting data from UI Scholar (scholar.ui.ac.id)...")
     try:
         ui_scholar_result = ui_scholar_search_tool._run(f"{professor_name} publications")
         # Keep UI Scholar data - 2500 chars
@@ -114,7 +127,7 @@ def simplified_cv_generation(professor_name: str, session_id: str = None) -> dic
     except Exception as e:
         print(f"  ✗ UI Scholar error: {e}")
     
-    print("\n[3/4] Collecting data from Google Scholar...")
+    print("\n[3/5] Collecting data from Google Scholar...")
     try:
         scholar_result = google_scholar_tool._run(professor_name)
         # Keep MORE data from Scholar - increase from 1200 to 2500 chars
@@ -123,10 +136,13 @@ def simplified_cv_generation(professor_name: str, session_id: str = None) -> dic
     except Exception as e:
         print(f"  ✗ Scholar error: {e}")
     
-    # Step 3: Create compact context for LLM
+    # Step 4: Create compact context for LLM
     print("\n[4/5] Generating CV with LLM...")
     
     compact_context = f"""DATA SOURCES FOR {professor_name}:
+
+🌐 ENG.UI.AC.ID OFFICIAL PERSONNEL PAGE (from eng.ui.ac.id - AUTHORITATIVE SOURCE):
+{collected_data['eng_ui_personnel'] if collected_data['eng_ui_personnel'] else 'Not available - will use fallback sources'}
 
 DATABASE INFORMATION (from RAG vector database):
 {collected_data['database'] or 'Not available'}
@@ -150,6 +166,13 @@ Research Areas: {', '.join(collected_data['raw_info'].get('research_areas', []))
 
 **CRITICAL RULES - VIOLATION WILL FAIL THE TASK:**
 
+0. **DATA SOURCE PRIORITY (NEW RULE)**:
+   - 🥇 **ENG.UI.AC.ID PERSONNEL PAGE**: If available, this is the AUTHORITATIVE source
+   - Use eng.ui.ac.id data for: Education, Research Expertise, Latest Publications, Position
+   - If eng.ui.ac.id shows education, USE IT EXACTLY (don't use other sources)
+   - If eng.ui.ac.id unavailable → fallback to DATABASE + UI SCHOLAR + GOOGLE SCHOLAR
+   - Example: If eng.ui.ac.id says "Bachelor, UI, 2008" → write exactly that
+
 1. **ZERO HALLUCINATION POLICY**:
    - ONLY write information that EXISTS in the data sources above
    - DO NOT invent, guess, or create ANY information
@@ -158,7 +181,9 @@ Research Areas: {', '.join(collected_data['raw_info'].get('research_areas', []))
    - When uncertain, write "Not available in sources"
 
 2. **EDUCATION VERIFICATION**:
-   - Look for education in DATABASE INFORMATION section FIRST
+   - 🚨 NEW: Look for education in ENG.UI.AC.ID section FIRST (if available)
+   - If eng.ui.ac.id has education data → USE IT, ignore other sources
+   - If eng.ui.ac.id unavailable → Look in DATABASE INFORMATION section
    - Check for degree patterns: "Ph.D.", "M.Sc.", "S.T.", "Ir.", "Bachelor", "Master", "Doctoral"
    - Check for university names: "University of", "Universitas", "Institut"
    - COPY education entries EXACTLY as written in source data
@@ -196,8 +221,9 @@ Create a detailed CV using this EXACT structure:
 
 **🚨 CRITICAL ANTI-HALLUCINATION PROTOCOL FOR EDUCATION 🚨**
 
-**STEP 1: SEARCH DATA SOURCES**
-Scan DATABASE INFORMATION section line by line for these EXACT patterns:
+**STEP 1: SEARCH DATA SOURCES** (NEW: Priority order)
+Priority 1: Scan ENG.UI.AC.ID OFFICIAL PERSONNEL PAGE section FIRST
+Priority 2: If eng.ui.ac.id unavailable, scan DATABASE INFORMATION section line by line for these EXACT patterns:
 - Lines containing: "Ph.D.", "PhD", "Doctoral"
 - Lines containing: "M.Sc.", "M.T.", "Master", "Magister"
 - Lines containing: "S.T.", "Ir.", "Bachelor", "Sarjana"
@@ -274,7 +300,13 @@ If no research areas found: "- Research interests not available in sources"
 **NEW EXTRACTION PROTOCOL:**
 
 ### STEP 1: RAPID SCAN (Find ALL potential publications)
-Scan ALL three data sources line by line. Look for these patterns:
+Scan ALL FOUR data sources line by line IN THIS PRIORITY ORDER:
+1. 🌐 ENG.UI.AC.ID OFFICIAL PERSONNEL PAGE (if available - use "Latest Publications" section)
+2. UI Scholar publications
+3. Database information
+4. Google Scholar publications
+
+Look for these patterns:
 - Lines with quotation marks containing research titles
 - Lines starting with numbers (1., 2., 3.) often indicate publications
 - Lines containing years (2019, 2020, 2021, etc.) near research terms
@@ -295,10 +327,11 @@ For EACH potential publication found:
 - Obviously unrelated author (completely different research field + different name)
 - Duplicate of already listed publication
 
-### STEP 3: PRIORITIZE BY SOURCE
-1. **UI SCHOLAR** publications → Extract ALL (most reliable)
-2. **DATABASE** publications → Extract if has title + year
-3. **GOOGLE SCHOLAR** publications → Use as supplementary
+### STEP 3: PRIORITIZE BY SOURCE (UPDATED WITH ENG.UI.AC.ID)
+1. **🌐 ENG.UI.AC.ID** publications (if available) → Extract ALL from "Latest Publications" section (AUTHORITATIVE)
+2. **UI SCHOLAR** publications → Extract ALL (most reliable)
+3. **DATABASE** publications → Extract if has title + year
+4. **GOOGLE SCHOLAR** publications → Use as supplementary
 
 ### STEP 4: FORMAT OUTPUT (MANDATORY FIELDS)
 
