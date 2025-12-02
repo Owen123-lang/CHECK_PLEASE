@@ -10,7 +10,8 @@ from tools import (
     academic_search_tool,
     google_scholar_tool,
     web_search_tool,
-    dynamic_web_scraper_tool
+    dynamic_web_scraper_tool,
+    ui_scholar_search_tool  # Add UI Scholar tool
 )
 import re
 
@@ -88,7 +89,7 @@ def simplified_cv_generation(professor_name: str, session_id: str = None) -> dic
     
     collected_data = {
         'database': None,
-        'sinta': None,
+        'ui_scholar': None,  # Add UI Scholar data
         'scholar': None,
         'raw_info': {}
     }
@@ -104,7 +105,16 @@ def simplified_cv_generation(professor_name: str, session_id: str = None) -> dic
     except Exception as e:
         print(f"  ✗ Database error: {e}")
     
-    print("\n[2/4] Collecting data from Google Scholar...")
+    print("\n[2/4] Collecting data from UI Scholar (scholar.ui.ac.id)...")
+    try:
+        ui_scholar_result = ui_scholar_search_tool._run(f"{professor_name} publications")
+        # Keep UI Scholar data - 2500 chars
+        collected_data['ui_scholar'] = clean_tool_output(ui_scholar_result, 2500)
+        print(f"  ✓ UI Scholar: {len(ui_scholar_result)} chars → {len(collected_data['ui_scholar'])} chars (cleaned)")
+    except Exception as e:
+        print(f"  ✗ UI Scholar error: {e}")
+    
+    print("\n[3/4] Collecting data from Google Scholar...")
     try:
         scholar_result = google_scholar_tool._run(professor_name)
         # Keep MORE data from Scholar - increase from 1200 to 2500 chars
@@ -113,15 +123,18 @@ def simplified_cv_generation(professor_name: str, session_id: str = None) -> dic
     except Exception as e:
         print(f"  ✗ Scholar error: {e}")
     
-    # Step 2: Create compact context for LLM
-    print("\n[3/4] Generating CV with LLM...")
+    # Step 3: Create compact context for LLM
+    print("\n[4/5] Generating CV with LLM...")
     
     compact_context = f"""DATA SOURCES FOR {professor_name}:
 
-DATABASE INFORMATION:
+DATABASE INFORMATION (from RAG vector database):
 {collected_data['database'] or 'Not available'}
 
-GOOGLE SCHOLAR PUBLICATIONS:
+UI SCHOLAR PUBLICATIONS (from scholar.ui.ac.id - PRIMARY SOURCE for UI faculty):
+{collected_data['ui_scholar'] if collected_data['ui_scholar'] else 'Not available'}
+
+GOOGLE SCHOLAR PUBLICATIONS (from Google Scholar API):
 {collected_data['scholar'] if collected_data['scholar'] else 'Not available'}
 
 EXTRACTED KEY INFO:
@@ -146,7 +159,7 @@ Create a detailed CV using this EXACT structure:
 - **Affiliation**: [Extract university name - usually Universitas Indonesia]
 - **Department**: [Extract full department name if mentioned, e.g., "Departemen Teknik Elektro"]
 - **Born**: [Extract birth date and place if available, e.g., "Jakarta, 15 Maret 1980"]
-- **Email**: [Extract email address if found. Format as: name[at]ui.ac.id or full email]
+- **Email**: [Extract email address if found. IMPORTANT: Use @ symbol, NOT [at]. Format as: name@ui.ac.id]
 - **Phone**: [Extract phone number if found]
 - **Office**: [Extract office location/room if mentioned]
 - **SINTA ID**: [Extract SINTA ID if found]
@@ -197,44 +210,66 @@ If no research areas found: "- Research interests not available in sources"
 
 ## PUBLICATIONS & SCHOLARLY WORKS
 
-**CRITICAL VALIDATION RULE FOR PUBLICATIONS:**
-- **Extract publications from BOTH the DATABASE INFORMATION section AND the GOOGLE SCHOLAR PUBLICATIONS section**
-- **ONLY include publications where the person's name ({professor_name}) appears in the author list**
-- **CHECK CAREFULLY**: Each publication must be authored or co-authored by {professor_name}
-- **DO NOT include publications from other people with similar names**
-- **DO NOT include publications that are just mentioned as references or citations**
-- **If the author list doesn't explicitly contain {professor_name} or their surname, SKIP that publication**
+**CRITICAL VALIDATION RULES FOR PUBLICATIONS - READ CAREFULLY:**
+
+1. **DATA SOURCE PRIORITY** (MOST IMPORTANT):
+   - **PRIMARY SOURCE**: UI SCHOLAR PUBLICATIONS section (scholar.ui.ac.id) - THIS IS THE MOST RELIABLE SOURCE for UI faculty
+   - **SECONDARY SOURCE**: DATABASE INFORMATION section (internal database)
+   - **TERTIARY SOURCE**: GOOGLE SCHOLAR PUBLICATIONS section (external API)
+   - **PRIORITIZE publications from UI Scholar** as they are official UI research repository
+
+2. **AUTHOR NAME VERIFICATION:**
+   - Extract ONLY publications where {professor_name}'s surname appears in the author list
+   - Look for the surname from {professor_name} in the "Authors:" or "by:" or "👥" field
+   - Example: If professor is "Riri Fitri Sari", look for "Sari" or "R. F. Sari" or "Riri Fitri Sari" in authors
+   - **If NO author names are listed with the publication, SKIP IT ENTIRELY**
+   - **If the publication only shows a title without authors, SKIP IT**
+
+3. **REJECT GENERIC/INCOMPLETE PUBLICATIONS:**
+   - ❌ SKIP: "The 18th International Conference on Quality in Research" (no paper title, just conference name)
+   - ❌ SKIP: "Conference: XYZ Conference" (no actual paper title)
+   - ❌ SKIP: Titles less than 30 characters (too generic)
+   - ✅ ACCEPT: "Design and Implementation of Smart Grid Using IoT Technology" with proper authors
+
+4. **REQUIRED ELEMENTS FOR EACH PUBLICATION:**
+   - Complete paper title (not just conference/journal name)
+   - Author list that includes {professor_name}
+   - Year or publication date
+   - Journal/Conference venue name
 
 ### Journal Articles
-[List ONLY journal publications where {professor_name} is an author. Extract from BOTH database and scholar data. Format each as:]
-- **[Complete Paper Title]**
-  - Authors: [{professor_name}'s name or surname must be in this list]
+[ONLY list journal publications that meet ALL validation rules above:]
+- **[Complete Paper Title - Must be specific research title, NOT just journal name]**
+  - Authors: [Full author list - {professor_name}'s surname MUST appear here]
   - Journal: [Journal name]
   - Year: [Publication year]
-  - DOI/Link: [If available]
   - Citations: [Number if available]
+  - Source: [UI Scholar / Database / Google Scholar]
 
 ### Conference Papers
-[List ONLY conference papers where {professor_name} is an author. Extract from BOTH database and scholar data:]
-- **[Complete Paper Title]**
-  - Authors: [{professor_name}'s name or surname must be in this list]
-  - Conference: [Full conference name]
-  - Location: [City, Country if available]
+[ONLY list conference papers that meet ALL validation rules above:]
+- **[Complete Paper Title - Must be specific research title, NOT just conference name]**
+  - Authors: [Full author list - {professor_name}'s surname MUST appear here]
+  - Conference: [Conference name]
   - Year: [Year]
   - Citations: [Number if available]
+  - Source: [UI Scholar / Database / Google Scholar]
 
 ### Books & Book Chapters
-[If any books or book chapters are mentioned where {professor_name} is an author, list them here]
+[If any books or book chapters with {professor_name} as author/co-author]
 
-**EXTRACTION INSTRUCTIONS**:
-1. **First**, look through the DATABASE INFORMATION section for publication titles, paper names, or research output
-2. **Second**, look through the GOOGLE SCHOLAR PUBLICATIONS section
-3. For EACH publication found, verify that {professor_name}'s surname appears in the author list
-4. Only extract publications that are CLEARLY authored or co-authored by {professor_name}
-5. If you see a publication title but NO author list, try to verify it belongs to {professor_name} from context
-6. If unsure whether a publication belongs to this person, SKIP it
-7. List at least 10-15 VERIFIED publications if available from both sources combined
-8. Better to have fewer accurate publications than many irrelevant ones
+**STEP-BY-STEP EXTRACTION PROCESS:**
+1. **PRIORITY 1**: Scan through UI SCHOLAR PUBLICATIONS section FIRST - this is the official UI repository
+2. **PRIORITY 2**: Scan through DATABASE INFORMATION section - look for publication entries with title + authors + year
+3. **PRIORITY 3**: Scan through GOOGLE SCHOLAR PUBLICATIONS section - use as supplementary source
+4. For EACH potential publication found:
+   - Step A: Check if it has a specific paper title (not just venue name)
+   - Step B: Check if it lists authors
+   - Step C: Verify {professor_name}'s surname is in the author list
+   - Step D: Only if ALL checks pass, add it to the list
+5. Target: 10-15 VERIFIED publications with complete information
+6. **Quality over quantity** - Better to list 5 accurate publications than 15 questionable ones
+7. **IMPORTANT**: Prefer UI Scholar publications over other sources when there are duplicates
 
 If no publications found: "- Publications not available in sources"
 
