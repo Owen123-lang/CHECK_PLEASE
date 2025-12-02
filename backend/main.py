@@ -419,12 +419,22 @@ async def upload_pdf(file: UploadFile = File(...), session_id: str = None):
     
     This allows users to upload their own PDF documents and ask questions about them.
     The AI will use the User PDF Search Tool to answer questions based on uploaded content.
+    
+    IMPORTANT: session_id is REQUIRED to ensure PDF is only accessible in that session.
     """
     try:
         print(f"\n{'='*60}")
         print(f"[PDF UPLOAD] Processing file: {file.filename}")
         print(f"[PDF UPLOAD] Content type: {file.content_type}")
         print(f"[PDF UPLOAD] Session ID: {session_id}")
+        
+        # CRITICAL: session_id is REQUIRED
+        if not session_id:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "session_id is required for PDF upload"}
+            )
+        
         print(f"{'='*60}")
         
         # Validate file type
@@ -494,6 +504,17 @@ async def upload_pdf(file: UploadFile = File(...), session_id: str = None):
         client = DataAPIClient(os.getenv("ASTRA_DB_APPLICATION_TOKEN"))
         db = client.get_database_by_api_endpoint(os.getenv("ASTRA_DB_API_ENDPOINT"))
         collection = db.get_collection(os.getenv("ASTRA_DB_COLLECTION", "academic_profiles_ui"))
+        
+        # CRITICAL: Delete old PDFs from this session before uploading new one
+        print(f"[PDF UPLOAD] Deleting old PDFs from session: {session_id}")
+        try:
+            delete_result = collection.delete_many(
+                filter={"session_id": session_id, "source_type": "user_pdf"}
+            )
+            deleted_count = delete_result.deleted_count if hasattr(delete_result, 'deleted_count') else 0
+            print(f"[PDF UPLOAD] ✓ Deleted {deleted_count} old PDF chunks from this session")
+        except Exception as e:
+            print(f"[PDF UPLOAD] Warning: Could not delete old PDFs: {e}")
         
         # Store chunks in database with embeddings
         print("[PDF UPLOAD] Storing in vector database...")
