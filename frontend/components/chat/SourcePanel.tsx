@@ -61,6 +61,7 @@ export default function SourcePanel({
       
       // CRITICAL: session_id is REQUIRED by backend
       // If no sessionId prop, generate a temporary one for this upload session
+      // Force rebuild: 2025-12-03T01:55:00Z
       const uploadSessionId = sessionId || `upload_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
       formData.append('session_id', uploadSessionId);
 
