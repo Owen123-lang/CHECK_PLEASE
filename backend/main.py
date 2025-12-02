@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -413,7 +413,7 @@ async def generate_pdf(request: QueryRequest):
         )
 
 @app.post("/api/upload-pdf")
-async def upload_pdf(file: UploadFile = File(...), session_id: str = None):
+async def upload_pdf(file: UploadFile = File(...), session_id: str = Form(None)):
     """
     Upload and process a PDF file. Extracts text, chunks it, and stores in vector database.
     
