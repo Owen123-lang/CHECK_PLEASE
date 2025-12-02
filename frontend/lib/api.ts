@@ -19,6 +19,7 @@ export const API_ENDPOINTS = {
   
   // AI endpoints
   AI_CHAT: `${AI_API_BASE_URL}/api/chat`,
+  AI_GENERATE_CV: `${AI_API_BASE_URL}/api/generate-cv`,
   
   // PDF endpoints
   PDF: `${API_BASE_URL}/api/pdf`,

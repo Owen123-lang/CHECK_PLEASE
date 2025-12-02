@@ -1,6 +1,7 @@
 "use client";
 import React, { useState } from 'react';
 import { Download, Loader2, FileText } from 'lucide-react';
+import { API_ENDPOINTS } from '@/lib/api';
 
 interface StudioPanelProps {
   sessionId?: string | null;
@@ -49,14 +50,9 @@ export default function StudioPanel({ sessionId, lastMessage }: StudioPanelProps
     try {
       console.log('[CV Export] Generating CV for:', professorName);
       console.log('[CV Export] Session ID:', sessionId);
+      console.log('[CV Export] Calling endpoint:', API_ENDPOINTS.AI_GENERATE_CV);
       
-      // Use environment variable for AI backend URL
-      const aiBackendUrl = process.env.NEXT_PUBLIC_AI_API_URL || 'http://localhost:8000';
-      const cvEndpoint = `${aiBackendUrl}/api/generate-cv`;
-      
-      console.log('[CV Export] Calling endpoint:', cvEndpoint);
-      
-      const response = await fetch(cvEndpoint, {
+      const response = await fetch(API_ENDPOINTS.AI_GENERATE_CV, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
