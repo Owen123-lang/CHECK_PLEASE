@@ -451,6 +451,33 @@ Before submitting, ask yourself:
 If answer is YES to all → Submit the CV
 If answer is NO → Go back and fix it
 
+**🎯 PUBLICATION FORMAT EXAMPLES (FOLLOW EXACTLY):**
+
+✅ GOOD PUBLICATION FORMATS:
+```
+- **IoT-Based Smart Home Energy Management with Machine Learning Optimization**
+  - Authors: Riri Fitri Sari, John Doe, Jane Smith
+  - Journal: IEEE Internet of Things Journal
+  - Year: 2023
+  - DOI: 10.1109/JIOT.2023.1234567
+  - Citations: 45
+  - Source: UI Scholar
+
+- **Deep Learning for Network Traffic Classification and Anomaly Detection**
+  - Authors: R.F. Sari, A. Kumar, B. Chen
+  - Conference: IEEE International Conference on Communications (ICC) 2022, Seoul, Korea
+  - Year: 2022
+  - Pages: 1234-1239
+  - Source: Google Scholar
+```
+
+❌ BAD FORMATS (REJECT THESE):
+```
+DOI/Link: https://repository.uniga.ac.id/file/... → NO! This is NOT a publication title!
+The 18th International Conference on Quality in Research → NO! This is ONLY conference name, WHERE IS THE PAPER TITLE?
+Teknologi Berbasis Serbuk: Pilar Manufaktur... → NO! Missing authors, year, venue!
+```
+
 Now generate the ACCURATE, COMPREHENSIVE, FACT-CHECKED CV:"""
 
     try:
@@ -460,6 +487,10 @@ Now generate the ACCURATE, COMPREHENSIVE, FACT-CHECKED CV:"""
         # Validate response
         if not cv_text or len(cv_text) < 100:
             raise ValueError("LLM returned insufficient content")
+        
+        # 🚨 CRITICAL FIX: Convert [at] notation to @ BEFORE returning to PDF generator
+        cv_text = cv_text.replace('[at]', '@').replace('[ at ]', '@').replace(' [at] ', '@')
+        print(f"  ✓ Email [at] notation converted to @ symbol")
         
         print(f"  ✓ CV generated: {len(cv_text)} characters")
         
