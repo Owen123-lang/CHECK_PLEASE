@@ -21,7 +21,7 @@ load_dotenv()
 llm = LLM(
     model="gemini/gemini-2.0-flash-exp",
     api_key=os.getenv("GEMINI_API_KEY"),
-    temperature=0.1,  # Lower temperature = more factual, less creative
+    temperature=0.0,  # ZERO temperature = 100% deterministic, ABSOLUTE ZERO hallucination
     max_tokens=16000,  # DOUBLED - need space for 15-20 publications
 )
 
@@ -183,35 +183,55 @@ Create a detailed CV using this EXACT structure:
 - **Affiliation**: [Extract university name - usually Universitas Indonesia]
 - **Department**: [Extract full department name if mentioned, e.g., "Departemen Teknik Elektro"]
 - **Born**: [Extract birth date and place if available, e.g., "Jakarta, 15 Maret 1980"]
-- **Email**: [Extract email address if found. IMPORTANT: Use @ symbol, NOT [at]. Format as: name@ui.ac.id]
+- **Google Scholar**: [Extract Google Scholar profile URL if found - PRIORITY FIELD. Format: https://scholar.google.com/citations?user=XXXXX]
+- **UI Scholar**: [Extract UI Scholar profile URL if found. Format: https://scholar.ui.ac.id/en/persons/XXXXX]
+- **Email**: [Extract email address ONLY if no Scholar links found. Use @ symbol, NOT [at]. Format: name@ui.ac.id]
 - **Phone**: [Extract phone number if found]
 - **Office**: [Extract office location/room if mentioned]
 - **SINTA ID**: [Extract SINTA ID if found]
-- **Scholar ID**: [Extract Google Scholar ID if found]
 
 ## ACADEMIC BACKGROUND
 
 ### Education History
 
-**EXTRACTION INSTRUCTIONS FOR EDUCATION:**
-1. Search DATABASE INFORMATION section for these keywords: "Ph.D.", "M.Sc.", "M.T.", "S.T.", "Ir.", "Bachelor", "Master", "Doctoral", "University of", "Universitas"
-2. Look for patterns like: "[Degree], [University], [Year]" or "[Degree] in [Field], [University], [Country], [Year]"
-3. COPY each education entry EXACTLY as it appears in the source
-4. DO NOT change university names (Leeds ≠ Wollongong!)
-5. DO NOT invent years or fields of study
-6. If degree is mentioned but details missing, write: "- [Degree Title] (details not available)"
+**🚨 CRITICAL ANTI-HALLUCINATION PROTOCOL FOR EDUCATION 🚨**
 
-**FORMAT (COPY EXACTLY FROM SOURCES):**
-- **[Exact Degree as written]**, [Exact University as written], [Country if mentioned], [Year if mentioned]
-  - Field: [Only if explicitly stated]
-  - Dissertation/Thesis: [Only if title is given]
-- **[Next degree]**, [University], [Year]
+**STEP 1: SEARCH DATA SOURCES**
+Scan DATABASE INFORMATION section line by line for these EXACT patterns:
+- Lines containing: "Ph.D.", "PhD", "Doctoral"
+- Lines containing: "M.Sc.", "M.T.", "Master", "Magister"
+- Lines containing: "S.T.", "Ir.", "Bachelor", "Sarjana"
+- Lines containing: "University", "Universitas", "Institut"
 
-**EXAMPLE OF CORRECT EXTRACTION:**
+**STEP 2: EXTRACT WITH REGEX VALIDATION**
+For EACH line found:
+✅ MUST contain: Degree name + Institution name
+✅ MUST have year (19XX or 20XX)
+❌ REJECT if: Same degree appears twice with different universities
+❌ REJECT if: University name contradicts other entries
+
+**STEP 3: DEDUPLICATE**
+- If "S.T., Universitas Indonesia, 1997" exists
+- And "Ir., Universitas Indonesia, 1993" exists
+- DO NOT also list "S.T., Universitas Indonesia, 1997" again (it's duplicate!)
+
+**STEP 4: COPY EXACTLY (NO SUBSTITUTION)**
 If source says: "M.Sc., University of Leeds, UK, 1997"
-Write EXACTLY: "- **M.Sc.**, University of Leeds, UK, 1997"
+→ Write EXACTLY: "- **M.Sc.**, University of Leeds, UK, 1997"
 
-If NO education found in ANY source: "- Education history not available in sources"
+If source says: "PhD., Leeds Univ., UK, 2004"
+→ Write EXACTLY: "- **Ph.D.**, Leeds Univ., UK, 2004"
+
+**NEVER EVER**:
+❌ Change "Leeds" to "Wollongong"
+❌ Change "Sheffield" to "Manchester"
+❌ Invent universities not in source
+❌ List duplicate degrees
+
+**FORMAT:**
+- **[Exact Degree]**, [Exact University], [Country], [Year]
+
+**If NO education found**: "- Education history not available in sources"
 
 ### Academic Titles & Certifications
 [If any academic titles (Lektor, Lektor Kepala, etc.) or certifications are mentioned, list them here]
@@ -280,23 +300,38 @@ For EACH potential publication found:
 2. **DATABASE** publications → Extract if has title + year
 3. **GOOGLE SCHOLAR** publications → Use as supplementary
 
-### STEP 4: FORMAT OUTPUT
-For EACH valid publication, write:
+### STEP 4: FORMAT OUTPUT (MANDATORY FIELDS)
+
+For EACH valid publication, YOU MUST include ALL these fields:
 
 **Journal Articles:**
 - **[Full Paper Title]**
-  - Authors: [List all authors, highlight {professor_name} if present]
-  - Journal: [Journal name]
-  - Year: [Year]
+  - Authors: [List all authors with {professor_name} highlighted if present]
+  - Journal: [FULL journal name]
+  - Year: [Publication year]
+  - DOI/Link: [If available]
   - Citations: [If available]
   - Source: [UI Scholar / Database / Google Scholar]
 
 **Conference Papers:**
-- **[Full Paper Title - NOT just conference name]**
-  - Authors: [List all authors]
-  - Conference: [Full conference name]
-  - Year: [Year]
+- **[Full Paper Title - REJECT if only conference name without paper title]**
+  - Authors: [MUST list authors]
+  - Conference: [FULL conference name with location]
+  - Year: [MUST have year]
+  - Pages: [If available]
   - Source: [UI Scholar / Database / Google Scholar]
+
+**🚨 QUALITY GATE:**
+Before adding ANY publication, verify:
+✅ Has complete paper title (not just "The 18th International Conference...")
+✅ Has author list (not just "{professor_name}" alone)
+✅ Has year (not "Not available")
+✅ Has venue (journal name OR conference name)
+
+❌ REJECT publications like:
+- "The 18th International Conference on Quality in Research" (no paper title!)
+- "IEEE Conference 2020" (too vague)
+- "Publication Title" (no authors, no year)
 
 **Books & Book Chapters:**
 [If any books with {professor_name} as author]
@@ -349,13 +384,20 @@ If metrics not available: "- Metrics data not available in sources"
 [List ALL awards, honors, grants, recognitions, or achievements mentioned]
 
 ## EXTERNAL PROFILES & LINKS
-- **SINTA**: [Extract full URL if found, otherwise use: https://sinta.kemdikbud.go.id/authors/profile/]
-- **Google Scholar**: [Extract full URL if found]
-- **Scopus**: [Extract Author ID or URL if found]
-- **ORCID**: [Extract if found]
-- **ResearchGate**: [Extract if found]
-- **LinkedIn**: [Extract if found]
-- **University Profile**: [Extract if found]
+
+**🎯 PRIORITY: Extract these profile URLs from data sources**
+
+Search ALL data sources for these URL patterns:
+- **Google Scholar**: Look for "scholar.google.com/citations?user=" → Extract full URL
+- **UI Scholar**: Look for "scholar.ui.ac.id/en/persons/" → Extract full URL
+- **SINTA**: Look for "sinta.kemdikbud.go.id/authors/profile/" → Extract full URL
+- **Scopus**: Look for "scopus.com/authid/detail.uri?authorId=" → Extract Author ID
+- **ORCID**: Look for "orcid.org/" → Extract ORCID ID
+- **ResearchGate**: Look for "researchgate.net/profile/" → Extract profile URL
+- **LinkedIn**: Look for "linkedin.com/in/" → Extract profile URL
+- **University Profile**: Look for "ui.ac.id" or "ee.ui.ac.id" → Extract profile page URL
+
+**If profile URLs NOT found in data**: Write "Not available in sources"
 
 ## CONTACT & ADDITIONAL INFORMATION
 [Any other relevant information not covered above]
@@ -364,17 +406,21 @@ If metrics not available: "- Metrics data not available in sources"
 
 **FINAL QUALITY CHECKLIST (VERIFY BEFORE SUBMITTING):**
 
-1. ✅ **EDUCATION**:
+1. ✅ **EDUCATION (ZERO TOLERANCE FOR HALLUCINATION)**:
    - Copied EXACTLY from source data (no invented universities)
    - If found "M.Sc., University of Leeds", did NOT write "University of Wollongong"
-   - Each degree has: Degree name + University + Year (if available)
+   - NO DUPLICATES: Each degree listed only once
+   - If "Ir., UI, 1993" and "S.T., UI, 1997" both exist, list BOTH (not duplicate!)
+   - But if "M.Sc., Leeds, 1997" appears twice, list only ONCE
 
-2. ✅ **PUBLICATIONS** (MOST IMPORTANT):
+2. ✅ **PUBLICATIONS** (MOST CRITICAL SECTION):
    - Extracted 15-20 publications (if available in data)
-   - Each has: Complete title + Authors + Year + Venue
-   - Prioritized UI Scholar publications
-   - NO generic conference names without paper titles
-   - Verified {professor_name}'s surname in author lists
+   - Each publication has ALL mandatory fields: Title + Authors + Year + Venue
+   - Paper titles are COMPLETE and SPECIFIC (not just conference names)
+   - Example GOOD: "A New Control System Algorithm Based on Predictive Model..."
+   - Example BAD: "The 18th International Conference..." (rejected!)
+   - Prioritized UI Scholar publications (most reliable)
+   - Verified {professor_name}'s name appears in author list or context
 
 3. ✅ **RESEARCH INTERESTS**:
    - Extracted ALL keywords and topics from all sources
@@ -385,10 +431,16 @@ If metrics not available: "- Metrics data not available in sources"
    - No invented degrees, universities, or publication titles
    - Used "Not available" when truly not found
 
-5. ✅ **FORMATTING**:
-   - Proper markdown with ** bold ** and - bullets
+5. ✅ **SCHOLAR LINKS** (NEW REQUIREMENT):
+   - Google Scholar profile URL extracted and listed in PERSONAL INFORMATION
+   - UI Scholar profile URL extracted if available
+   - If Scholar links found, they appear BEFORE email field
+   - Email only shown if no Scholar links available
+
+6. ✅ **FORMATTING**:
+   - Proper markdown with **bold** and - bullets
    - Professional layout with clear sections
-   - Email uses @ symbol (not [at])
+   - All URLs are complete and clickable
 
 **ANTI-HALLUCINATION FINAL CHECK:**
 Before submitting, ask yourself:
