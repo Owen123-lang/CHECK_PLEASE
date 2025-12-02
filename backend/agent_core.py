@@ -38,7 +38,7 @@ class HybridRAG:
             model="gemini/gemini-2.5-pro",
             api_key=api_key,
             temperature=0.2,
-            max_tokens=2000,
+            max_tokens=8000,  # Increased from 2000 to handle larger contexts
         )
     
     def query(self, user_query: str, user_urls: list = None, conversation_history: list = None, session_id: str = None) -> str:
@@ -573,10 +573,11 @@ Please try again with a more specific question!"""
             ])
             
             # NEW: Detect if query is asking about uploaded PDF
-            is_pdf_query = any(keyword in query.lower() for keyword in [
+            query_lower = query.lower()
+            is_pdf_query = any(keyword in query_lower for keyword in [
                 'pdf', 'dokumen', 'document', 'file', 'upload', 'yang saya kasih', 'yang saya berikan',
-                'dari pdf', 'isi pdf', 'rangkum', 'summarize', 'jelasin', 'explain',
-                'apa isi', 'what is in', 'contents of'
+                'dari pdf', 'isi pdf', 'rangkum', 'summarize', 'jelasin', 'explain', 'jelaskan',
+                'apa isi', 'what is in', 'contents of', 'isi dari', 'tentang pdf'
             ])
             
             # Create the agent
@@ -612,7 +613,7 @@ Please try again with a more specific question!"""
                 llm=self.llm,
                 verbose=True,
                 allow_delegation=False,
-                max_iter=5,  # Increased from 3 to 5 to allow more attempts
+                max_iter=3,  # Reduced from 5 to 3 - avoid infinite loops
             )
             
             # Build task description with context
@@ -626,20 +627,25 @@ Please try again with a more specific question!"""
             
             # Build task description based on query type
             if is_pdf_query:
+                # CRITICAL: For PDF queries, SKIP vector search context to avoid token limit
                 task_description = f"""USER QUERY: "{query}"
 
 **YOUR TASK:**
-1. Execute the 'User PDF Search Tool' with query: "{query}"
-2. Summarize the PDF content found in Indonesian language
-3. Format the answer nicely with headers and bullet points
+Use the 'User PDF Search Tool' to find content from the uploaded PDF, then summarize it in Indonesian.
 
-**IMPORTANT RULES:**
-- You MUST use the PDF Search Tool to get the content
-- DO NOT return JSON - return actual formatted text
-- Summarize in Indonesian language
-- Keep the answer clear and well-structured
+**EXECUTION STEPS:**
+1. Call: User PDF Search Tool
+   Input: "{query}"
+2. After getting results, format them nicely in Indonesian
+3. Use headers (##) and bullet points (-)
 
-Start by using the PDF Search Tool NOW."""
+**CRITICAL RULES:**
+- MUST execute the tool (not describe it)
+- Return ACTUAL TEXT (not JSON)
+- Answer in Indonesian language
+- If tool returns empty, say "Maaf, tidak ada PDF yang ditemukan untuk sesi ini"
+
+Execute NOW:"""
             elif is_publication_query:
                 task_description = f"""{context_prefix}Answer: "{query}"
 
