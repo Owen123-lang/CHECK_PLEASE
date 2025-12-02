@@ -61,8 +61,12 @@ export default function SourcePanel({
       
       // CRITICAL: session_id is REQUIRED by backend
       // If no sessionId prop, generate a temporary one for this upload session
-      // Force rebuild: 2025-12-03T01:55:00Z
       const uploadSessionId = sessionId || `upload_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+      
+      // DEBUG: Log untuk verifikasi
+      console.log('PDF Upload - sessionId prop:', sessionId);
+      console.log('PDF Upload - generated uploadSessionId:', uploadSessionId);
+      
       formData.append('session_id', uploadSessionId);
 
       const response = await fetch(API_ENDPOINTS.AI_UPLOAD_PDF, {
