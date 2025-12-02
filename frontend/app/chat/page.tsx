@@ -72,13 +72,16 @@ function ChatPageContent() {
 
     try {
       const token = getAuthToken();
-      // Don't convert to Number if notebookId is UUID string
-      const endpoint = notebookId.includes('-')
-        ? `${API_ENDPOINTS.NOTEBOOKS}/${notebookId}`
-        : API_ENDPOINTS.NOTEBOOK(Number(notebookId));
+      
+      // Validate that notebookId is a valid integer
+      const numericId = parseInt(notebookId, 10);
+      if (isNaN(numericId) || numericId <= 0) {
+        console.error('Invalid notebook ID:', notebookId);
+        return;
+      }
       
       const response = await fetch(
-        endpoint,
+        API_ENDPOINTS.NOTEBOOK(numericId),
         {
           headers: {
             'Authorization': `Bearer ${token}`,

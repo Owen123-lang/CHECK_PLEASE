@@ -8,7 +8,7 @@ import ProtectedRoute from '@/components/auth/ProtectedRoute';
 import { API_ENDPOINTS } from '@/lib/api';
 
 interface Notebook {
-  id: number;
+  id: string;  // UUID from PostgreSQL
   user_id: number;
   title: string;
   created_at: string;
@@ -23,7 +23,7 @@ export default function NotebooksPage() {
   const [newNotebookTitle, setNewNotebookTitle] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [editingNotebook, setEditingNotebook] = useState<Notebook | null>(null);
-  const [menuOpenId, setMenuOpenId] = useState<number | null>(null);
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const { logout } = useAuth();
 
   useEffect(() => {
@@ -83,14 +83,14 @@ export default function NotebooksPage() {
     }
   };
 
-  const handleUpdateNotebook = async (id: number, title: string) => {
+  const handleUpdateNotebook = async (id: string, title: string) => {
     if (!title.trim()) {
       alert('Notebook title cannot be empty');
       return;
     }
 
     // Validate ID before API call
-    if (!id || isNaN(id)) {
+    if (!id || typeof id !== 'string') {
       console.error('Invalid notebook ID:', id);
       alert('Invalid notebook ID. Please refresh the page.');
       return;
@@ -120,14 +120,14 @@ export default function NotebooksPage() {
     }
   };
 
-  const handleDeleteNotebook = async (id: number) => {
+  const handleDeleteNotebook = async (id: string) => {
     if (!confirm('Are you sure you want to delete this notebook?')) {
       setMenuOpenId(null);
       return;
     }
 
     // Validate ID before API call
-    if (!id || isNaN(id)) {
+    if (!id || typeof id !== 'string') {
       console.error('Invalid notebook ID:', id);
       alert('Invalid notebook ID. Please refresh the page.');
       setMenuOpenId(null);

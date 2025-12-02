@@ -10,7 +10,7 @@ export const API_ENDPOINTS = {
   
   // Notebook endpoints
   NOTEBOOKS: `${API_BASE_URL}/api/notebooks`,
-  NOTEBOOK: (id: number) => `${API_BASE_URL}/api/notebooks/${id}`,
+  NOTEBOOK: (id: string | number) => `${API_BASE_URL}/api/notebooks/${id}`,
   
   // Chat endpoints
   CHAT: `${API_BASE_URL}/api/chat`,
