@@ -68,6 +68,13 @@ export default function SourcePanel({
       console.log('PDF Upload - generated uploadSessionId:', uploadSessionId);
       
       formData.append('session_id', uploadSessionId);
+      
+      // DEBUG: Verify FormData contents
+      console.log('FormData entries:');
+      const entries = Array.from(formData.entries());
+      entries.forEach(([key, value]) => {
+        console.log(`  ${key}:`, value instanceof File ? `File(${value.name})` : value);
+      });
 
       const response = await fetch(API_ENDPOINTS.AI_UPLOAD_PDF, {
         method: 'POST',
