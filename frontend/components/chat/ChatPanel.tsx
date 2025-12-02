@@ -23,7 +23,7 @@ interface ChatPanelProps {
 
 interface PreviousChat {
   id: number;
-  notebookId: number;
+  notebookId: string;  // Changed to string (UUID)
   sender: string;
   body: string;
   created_at: string;

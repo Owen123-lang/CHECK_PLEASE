@@ -10,7 +10,7 @@ import { API_ENDPOINTS } from "@/lib/api";
 
 interface PreviousChat {
   id: number;
-  notebookId: number;
+  notebookId: string;  // Changed to string (UUID)
   sender: string;
   body: string;
   created_at: string;
@@ -73,15 +73,9 @@ function ChatPageContent() {
     try {
       const token = getAuthToken();
       
-      // Validate that notebookId is a valid integer
-      const numericId = parseInt(notebookId, 10);
-      if (isNaN(numericId) || numericId <= 0) {
-        console.error('Invalid notebook ID:', notebookId);
-        return;
-      }
-      
+      // notebookId is now UUID string, no need to parse
       const response = await fetch(
-        API_ENDPOINTS.NOTEBOOK(numericId),
+        API_ENDPOINTS.NOTEBOOK(notebookId),
         {
           headers: {
             'Authorization': `Bearer ${token}`,
