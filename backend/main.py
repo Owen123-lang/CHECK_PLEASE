@@ -504,9 +504,12 @@ async def upload_pdf(file: UploadFile = File(...), session_id: str = None):
                 # Generate embedding for this chunk
                 embedding = embeddings.embed_query(chunk['text'])
                 
+                # Generate unique ID using UUID + timestamp to avoid collisions
+                unique_id = f"{session_id or 'default'}_{uuid.uuid4().hex[:12]}_{i}"
+                
                 # Create document
                 doc = {
-                    "_id": f"{session_id or 'default'}_{file.filename}_{i}",
+                    "_id": unique_id,
                     "text": chunk['text'],
                     "page_number": chunk['page'],
                     "pdf_name": chunk['pdf_name'],
@@ -516,12 +519,22 @@ async def upload_pdf(file: UploadFile = File(...), session_id: str = None):
                     "$vector": embedding
                 }
                 
-                # Insert into database
-                collection.insert_one(doc)
-                stored_count += 1
-                
-                if (i + 1) % 10 == 0:
-                    print(f"[PDF UPLOAD]   Stored {i + 1}/{len(chunks)} chunks...")
+                # Use insert_one with error handling for duplicates
+                try:
+                    collection.insert_one(doc)
+                    stored_count += 1
+                    
+                    if (i + 1) % 10 == 0:
+                        print(f"[PDF UPLOAD]   Stored {i + 1}/{len(chunks)} chunks...")
+                except Exception as insert_error:
+                    # If document exists, try with new UUID
+                    if "DOCUMENT_ALREADY_EXISTS" in str(insert_error):
+                        doc["_id"] = f"{session_id or 'default'}_{uuid.uuid4().hex[:12]}_{i}_{int(datetime.now().timestamp())}"
+                        collection.insert_one(doc)
+                        stored_count += 1
+                        print(f"[PDF UPLOAD]   Retried chunk {i} with new ID")
+                    else:
+                        raise insert_error
                     
             except Exception as e:
                 print(f"[PDF UPLOAD] Error storing chunk {i}: {e}")
