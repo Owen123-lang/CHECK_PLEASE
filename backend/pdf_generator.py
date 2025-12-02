@@ -160,36 +160,36 @@ def parse_markdown_cv(markdown_text: str) -> dict:
                 if is_valid_data(research):
                     cv_data['research_areas'].append(research)
         
-        elif current_section in ['PUBLICATIONS', 'PUBLICATIONS & SCHOLARLY WORKS']:
+        elif current_section in ['PUBLICATIONS', 'PUBLICATIONS & SCHOLARLY WORKS', 'SELECTED PUBLICATIONS']:
             # Support multiple formats:
-            # 1. Numbered list: "1. Title (Year)"
-            # 2. Bullet with bold: "- **Title** - Authors, Journal (Year)"
-            # 3. Under subsections: "### Journal Articles", "### Conference Papers"
+            # Format 1: Numbered list with title only: "1. Title (Year)"
+            # Format 2: Bullet with bold: "- **Title**"
+            # Format 3: Multi-line structured format (NEW):
+            #    - **Title**
+            #      - Authors: ...
+            #      - Journal: ...
+            #      - Year: ...
             
-            if re.match(r'^\d+\.', line):  # Numbered list
-                pub = re.sub(r'^\d+\.\s*', '', line).strip()
-                pub = re.sub(r'\*\*([^*]+)\*\*', r'\1', pub)  # Remove bold
-                # Filter: must have year OR journal name OR be substantial
-                has_year = bool(re.search(r'\(?\d{4}\)?', pub))
-                has_journal = bool(re.search(r'(?:Journal|Conference|Proceedings|IEEE|ACM)', pub, re.IGNORECASE))
-                is_substantial = len(pub) > 40  # At least 40 chars for a real publication
-                
-                # Skip garbage like "Director Rector" or "Authors: NK Firani"
-                is_garbage = bool(re.search(r'^(Director|Authors:|Journal:|Year:|Link:)', pub, re.IGNORECASE))
-                
-                if is_valid_data(pub) and (has_year or has_journal or is_substantial) and not is_garbage:
-                    cv_data['publications'].append(pub)
-            elif line.startswith('- '):
-                pub = line[2:].strip()
-                pub = re.sub(r'\*\*([^*]+)\*\*', r'\1', pub)  # Remove bold
-                # Same filtering
-                has_year = bool(re.search(r'\(?\d{4}\)?', pub))
-                has_journal = bool(re.search(r'(?:Journal|Conference|Proceedings|IEEE|ACM)', pub, re.IGNORECASE))
-                is_substantial = len(pub) > 40
-                is_garbage = bool(re.search(r'^(Director|Authors:|Journal:|Year:|Link:)', pub, re.IGNORECASE))
-                
-                if is_valid_data(pub) and (has_year or has_journal or is_substantial) and not is_garbage:
-                    cv_data['publications'].append(pub)
+            # Check if this is a title line (numbered or bold bullet)
+            if re.match(r'^\d+\.', line):  # Numbered: "1. Title"
+                pub_title = re.sub(r'^\d+\.\s*', '', line).strip()
+                pub_title = re.sub(r'\*\*([^*]+)\*\*', r'\1', pub_title)  # Remove bold
+                # Accept if substantial (>30 chars) and not metadata
+                is_metadata = bool(re.search(r'^(Authors:|Journal:|Year:|Source:|Conference:|DOI:)', pub_title, re.IGNORECASE))
+                if is_valid_data(pub_title) and len(pub_title) > 30 and not is_metadata:
+                    cv_data['publications'].append(pub_title)
+                    
+            elif line.startswith('- **') and not line.startswith('- **Authors') and not line.startswith('- **Journal') and not line.startswith('- **Year'):
+                # Bullet with bold title: "- **Paper Title**"
+                pub_title = line[2:].strip()
+                pub_title = re.sub(r'\*\*([^*]+)\*\*', r'\1', pub_title)  # Remove bold
+                # Accept if substantial and not metadata line
+                is_metadata = bool(re.search(r'^(Authors|Journal|Year|Source|Conference|DOI)', pub_title, re.IGNORECASE))
+                if is_valid_data(pub_title) and len(pub_title) > 30 and not is_metadata:
+                    cv_data['publications'].append(pub_title)
+                    
+            # Note: We're only extracting titles, not the full structured data
+            # This is intentional - the metadata lines (Authors:, Journal:, Year:) are skipped
         
         elif current_section in ['ACADEMIC METRICS', 'ACADEMIC METRICS & IMPACT']:
             if 'SINTA Score:' in line or 'sinta score:' in line.lower():
