@@ -20,11 +20,12 @@ import re
 load_dotenv()
 
 # Initialize LLM for agents with MUCH higher token limit for comprehensive CVs
+# Using gemini-2.5-pro (latest & best) for SUPERIOR instruction following
 llm = LLM(
-    model="gemini/gemini-2.0-flash-exp",
+    model="gemini/gemini-2.5-pro",  # Latest Gemini model - best instruction following
     api_key=os.getenv("GEMINI_API_KEY"),
-    temperature=0.0,  # ZERO temperature = 100% deterministic, ABSOLUTE ZERO hallucination
-    max_tokens=16000,  # DOUBLED - need space for 15-20 publications
+    temperature=0.1,  # Slightly increased from 0.0 to allow more creativity in extraction
+    max_tokens=16000,  # Need space for 15-20 publications with full details
 )
 
 def clean_tool_output(text: str, max_chars: int = 3500) -> str:
@@ -168,9 +169,15 @@ Research Areas: {', '.join(collected_data['raw_info'].get('research_areas', []))
         response = llm.call([{"role": "user", "content": prompt}])
         cv_text = str(response).strip()
         
-        # Validate response
+        # Validate response LENGTH (should be at least 5000 chars for 10+ publications)
         if not cv_text or len(cv_text) < 100:
             raise ValueError("LLM returned insufficient content")
+        
+        # 🚨 CRITICAL VALIDATION: Check publication count
+        publication_count = cv_text.lower().count('\n- **') + cv_text.lower().count('\n1. **') + cv_text.lower().count('\n2. **')
+        if publication_count < 8:
+            print(f"  ⚠️ WARNING: Only {publication_count} publications found in output (expected 10+)")
+            print(f"  ⚠️ LLM output length: {len(cv_text)} chars (should be 5000+ for complete CV)")
         
         # 🚨 CRITICAL FIX: Convert [at] notation to @ BEFORE returning to PDF generator
         cv_text = cv_text.replace('[at]', '@').replace('[ at ]', '@').replace(' [at] ', '@')
