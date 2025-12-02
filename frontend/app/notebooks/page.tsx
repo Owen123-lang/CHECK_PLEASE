@@ -104,7 +104,6 @@ export default function NotebooksPage() {
       if (data.success) {
         setNotebooks(notebooks.map(nb => nb.id === id ? data.payload : nb));
         setEditingNotebook(null);
-        alert('Notebook renamed successfully!');
       } else {
         alert('Failed to rename notebook: ' + (data.message || 'Unknown error'));
       }
@@ -133,7 +132,6 @@ export default function NotebooksPage() {
       const data = await response.json();
       if (data.success) {
         setNotebooks(notebooks.filter(nb => nb.id !== id));
-        alert('Notebook deleted successfully!');
       } else {
         alert('Failed to delete notebook: ' + (data.message || 'Unknown error'));
       }
