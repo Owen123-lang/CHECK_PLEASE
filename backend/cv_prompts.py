@@ -136,13 +136,32 @@ For each valid publication:
 
 ## SELECTED PUBLICATIONS
 
-🚨 **CRITICAL REQUIREMENTS:**
-- Extract MINIMUM 10 complete publications from sources
-- EVERY publication MUST have ALL FOUR fields: Title, Authors, Year, Venue
-- Year is MANDATORY - reject publications without years
-- NO "Source: ENG.UI.AC.ID" entries without actual paper titles
+🚨 **ABSOLUTE REQUIREMENTS - NON-NEGOTIABLE:**
+1. You MUST list AT LEAST 10 publications (target: 15)
+2. EVERY publication MUST include ALL 4 fields:
+   - **[Complete Paper Title]**
+   - Authors: [Full list]
+   - Journal/Conference: [Full name]
+   - Year: [YYYY] ← MANDATORY
+3. Do NOT skip publications from the sources above
+4. Do NOT write "Source: ENG.UI.AC.ID" without actual paper title
+5. Extract ALL publications visible in the data sources
 
-[Now list 10-15 publications in the exact format shown above]
+**NOW LIST 10-15 PUBLICATIONS BELOW:**
+
+1. **[First publication title]**
+   - Authors: [...]
+   - Journal/Conference: [...]
+   - Year: [YYYY]
+   - Source: [...]
+
+2. **[Second publication title]**
+   - Authors: [...]
+   - Journal/Conference: [...]
+   - Year: [YYYY]
+   - Source: [...]
+
+[Continue listing ALL publications from sources - minimum 10 required]
 
 ---
 
