@@ -15,18 +15,38 @@ export default function StudioPanel({ sessionId, lastMessage }: StudioPanelProps
   const extractProfessorName = (content: string): string | null => {
     if (!content) return null;
     
-    // Look for common patterns: Prof., Dr., etc.
+    // Filter out UI text and common words first
+    const excludeWords = ['export', 'profile', 'button', 'download', 'pdf', 'generate', 'studio'];
+    const lowerContent = content.toLowerCase();
+    
+    // Skip if content contains UI-related words
+    if (excludeWords.some(word => lowerContent.includes(word) && lowerContent.length < 50)) {
+      return null;
+    }
+    
+    // Look for academic titles with names (more specific patterns)
     const patterns = [
-      /(?:Prof\.?\s*)?(?:Dr\.?\s*)?(?:Ir\.?\s*)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/,
-      /untuk\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/i,
-      /for\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/i,
-      /about\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/i,
+      // Match "Prof. Dr. FirstName LastName" or similar
+      /(Prof\.?\s+)?(?:Dr\.?\s+)?(?:Ir\.?\s+)?(?:Drs\.?\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,4})(?:\s*,?\s*M\.\w+\.?)?/,
+      // Match "about/for Professor Name"
+      /(?:about|for|tentang)\s+(Prof\.?\s+)?(?:Dr\.?\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})/i,
+      // Match names in quotes
+      /"([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})"/,
+      // Match names after "tell me about" or similar
+      /tell\s+me\s+about\s+(Prof\.?\s+)?(?:Dr\.?\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})/i,
     ];
     
     for (const pattern of patterns) {
       const match = content.match(pattern);
       if (match) {
-        return match[0].trim();
+        // Get the full match or the captured group
+        const name = match[0].trim();
+        
+        // Validate: must contain at least 2 words and not be too short
+        const words = name.split(/\s+/).filter(w => w.length > 1);
+        if (words.length >= 2 && name.length > 8) {
+          return name;
+        }
       }
     }
     return null;
