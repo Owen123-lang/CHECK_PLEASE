@@ -16,15 +16,15 @@ import re
 
 load_dotenv()
 
-# Initialize LLM for agents
+# Initialize LLM for agents with higher token limit for detailed CVs
 llm = LLM(
     model="gemini/gemini-2.0-flash-exp",
     api_key=os.getenv("GEMINI_API_KEY"),
-    temperature=0.2,
-    max_tokens=4000,
+    temperature=0.3,
+    max_tokens=8000,  # Increased for more detailed output
 )
 
-def clean_tool_output(text: str, max_chars: int = 1500) -> str:
+def clean_tool_output(text: str, max_chars: int = 3500) -> str:
     """Clean and truncate tool output to avoid context overflow."""
     # Remove HTML-like tags
     text = re.sub(r'<[^>]+>', '', text)
@@ -97,7 +97,8 @@ def simplified_cv_generation(professor_name: str, session_id: str = None) -> dic
     print("\n[1/4] Collecting data from Academic Database...")
     try:
         db_result = academic_search_tool._run(professor_name)
-        collected_data['database'] = clean_tool_output(db_result, 1000)
+        # Keep MORE data from database - increase from 1000 to 3000 chars
+        collected_data['database'] = clean_tool_output(db_result, 3000)
         collected_data['raw_info'].update(extract_key_info(db_result))
         print(f"  ✓ Database: {len(db_result)} chars → {len(collected_data['database'])} chars (cleaned)")
     except Exception as e:
@@ -106,7 +107,8 @@ def simplified_cv_generation(professor_name: str, session_id: str = None) -> dic
     print("\n[2/4] Collecting data from Google Scholar...")
     try:
         scholar_result = google_scholar_tool._run(professor_name)
-        collected_data['scholar'] = clean_tool_output(scholar_result, 1200)
+        # Keep MORE data from Scholar - increase from 1200 to 2500 chars
+        collected_data['scholar'] = clean_tool_output(scholar_result, 2500)
         print(f"  ✓ Scholar: {len(scholar_result)} chars → {len(collected_data['scholar'])} chars (cleaned)")
     except Exception as e:
         print(f"  ✗ Scholar error: {e}")
@@ -116,93 +118,189 @@ def simplified_cv_generation(professor_name: str, session_id: str = None) -> dic
     
     compact_context = f"""DATA SOURCES FOR {professor_name}:
 
-DATABASE:
+DATABASE INFORMATION:
 {collected_data['database'] or 'Not available'}
 
-GOOGLE SCHOLAR:
-{collected_data['scholar'][:500] if collected_data['scholar'] else 'Not available'}
+GOOGLE SCHOLAR PUBLICATIONS:
+{collected_data['scholar'] if collected_data['scholar'] else 'Not available'}
 
-EXTRACTED INFO:
+EXTRACTED KEY INFO:
 Name: {collected_data['raw_info'].get('name', professor_name)}
 Birth: {collected_data['raw_info'].get('birth', 'Not available')}
 SINTA Score: {collected_data['raw_info'].get('sinta_score', 'Not available')}
 Research Areas: {', '.join(collected_data['raw_info'].get('research_areas', [])) or 'Not available'}
 """
 
-    prompt = f"""You are creating a professional academic CV. Extract ALL available information from the provided data sources.
+    prompt = f"""You are an expert academic CV writer. Create a COMPREHENSIVE and DETAILED professional CV from the provided data sources.
 
 {compact_context}
 
-Create a comprehensive CV using this EXACT structure:
+**YOUR MISSION**: Extract and present EVERY piece of information available. This CV should be thorough and professional.
 
-# [Full Name with ALL academic titles - Prof., Dr., Ir., etc.]
+Create a detailed CV using this EXACT structure:
+
+# [Full Name with ALL academic titles - Prof., Dr., Ir., M.T., Ph.D., etc.]
 
 ## PERSONAL INFORMATION
-- Position: [Extract exact position/title from data - e.g., "Professor", "Guru Besar", "Associate Professor"]
-- Affiliation: Universitas Indonesia
-- Department: [Extract department if mentioned, otherwise "Departemen Teknik Elektro"]
-- Born: [Extract birth date and place if available]
-- Email: [Extract email if found]
+- **Position**: [Extract exact position/title - e.g., "Professor", "Lecturer", "Senior Lecturer", "Guru Besar"]
+- **Affiliation**: [Extract university name - usually Universitas Indonesia]
+- **Department**: [Extract full department name if mentioned, e.g., "Departemen Teknik Elektro"]
+- **Born**: [Extract birth date and place if available, e.g., "Jakarta, 15 Maret 1980"]
+- **Email**: [Extract email address if found]
+- **Phone**: [Extract phone number if found]
+- **Office**: [Extract office location/room if mentioned]
+- **SINTA ID**: [Extract SINTA ID if found]
+- **Scholar ID**: [Extract Google Scholar ID if found]
 
-## EDUCATION
-[List ALL degrees found with institution and year if available. Format as bullet points:]
-- [Degree] from [Institution], [Year]
-- [Degree] from [Institution], [Year]
+## ACADEMIC BACKGROUND
 
-If no education data found: "- Data not available in sources"
+### Education History
+[List ALL degrees chronologically, newest first. Include as much detail as possible:]
+- **[Degree Title]** (e.g., Ph.D., S3, Doctoral) in [Field], [University Name], [Country], [Year]
+  - Dissertation: [Title if mentioned]
+  - Advisor: [Name if mentioned]
+- **[Degree Title]** (e.g., M.T., S2, Master) in [Field], [University Name], [Country], [Year]
+  - Thesis: [Title if mentioned]
+- **[Degree Title]** (e.g., S.T., S1, Bachelor) in [Field], [University Name], [Country], [Year]
 
-## CURRENT POSITIONS
-[List ALL current positions/roles found. Format as bullet points:]
-- [Position] at [Institution/Organization]
-- [Position] at [Institution/Organization]
+If no education data found: "- Education history not available in sources"
 
-If no positions found: "- Data not available in sources"
+### Academic Titles & Certifications
+[If any academic titles (Lektor, Lektor Kepala, etc.) or certifications are mentioned, list them here]
 
-## RESEARCH INTERESTS
-[Extract ALL research areas, topics, or keywords mentioned. Format as bullet points:]
-- [Research Area 1]
-- [Research Area 2]
-- [Research Area 3]
+## CURRENT POSITIONS & ROLES
+[List ALL current positions, roles, and responsibilities:]
+- **[Position Title]** at [Institution/Organization]
+  - [Additional details about the role if available]
+- **[Position Title]** at [Institution/Organization]
 
-Examples: Protocol Engineering, Computer Networks, IoT, ICT Implementation, etc.
+Examples: Lecturer, Head of Laboratory, Program Coordinator, Committee Member, etc.
 
-If no research areas found: "- Data not available in sources"
+If no positions found: "- Current positions not available in sources"
 
-## PUBLICATIONS
-[List ALL publications found from Google Scholar or other sources. Format as bullet points with bold titles:]
-- **[Paper Title]** Authors: [Authors]. [Journal/Conference], [Year]. [Citations info if available]
+## RESEARCH INTERESTS & EXPERTISE
+[Extract and group ALL research areas, expertise, and keywords. Be specific and comprehensive:]
 
-List up to 10 most important publications. If more than 10, list the most cited or recent ones.
+### Primary Research Areas:
+- [Main Research Area 1] - [Brief description if available]
+- [Main Research Area 2] - [Brief description if available]
 
-If no publications found: "- Data not available in sources"
+### Specialized Topics:
+- [Specific Topic 1]
+- [Specific Topic 2]
+- [Specific Topic 3]
 
-## ACADEMIC METRICS
-- SINTA Score: [Extract score if found, otherwise "Not available"]
-- Google Scholar Citations: [Extract total citations if found, otherwise "Not available"]
-- H-Index: [Extract if found, otherwise "Not available"]
+### Keywords:
+[List all relevant keywords: e.g., Energy Systems, Control Optimization, Power Electronics, Smart Grid, Renewable Energy, Machine Learning, etc.]
 
-## EXTERNAL PROFILES
-- SINTA: [Extract URL or use: https://sinta.kemdikbud.go.id/authors/profile/5977168]
-- Google Scholar: [Extract URL if found]
-- Scopus: [Extract URL if found]
+If no research areas found: "- Research interests not available in sources"
 
-## AWARDS AND RECOGNITION
-[If any awards, honors, or recognition mentioned, list them here. Otherwise omit this section]
+## PUBLICATIONS & SCHOLARLY WORKS
+
+### Journal Articles
+[List ALL journal publications found. Include full details:]
+- **[Complete Paper Title]**
+  - Authors: [All authors names]
+  - Journal: [Journal name]
+  - Year: [Publication year]
+  - DOI/Link: [If available]
+  - Citations: [Number if available]
+
+### Conference Papers
+[List ALL conference papers found:]
+- **[Complete Paper Title]**
+  - Authors: [All authors]
+  - Conference: [Full conference name]
+  - Location: [City, Country if available]
+  - Year: [Year]
+  - Citations: [Number if available]
+
+### Books & Book Chapters
+[If any books or book chapters are mentioned, list them here]
+
+**NOTE**: Extract publication titles from the Google Scholar data. List at least 10-15 publications if available. Include as many as you can find.
+
+If no publications found: "- Publications not available in sources"
+
+## RESEARCH PROJECTS & GRANTS
+[If any research projects, grants, or funding information is mentioned, list them here with details]
+
+## TEACHING & COURSES
+[If any teaching activities or courses taught are mentioned, list them here]
+
+## ACADEMIC METRICS & IMPACT
+
+### Citation Metrics
+- **Total Citations**: [Extract from Google Scholar data]
+- **H-Index**: [Extract if available]
+- **i10-Index**: [Extract if available]
+- **SINTA Score**: [Extract if found]
+- **Scopus H-Index**: [Extract if available]
+
+### Research Output
+- **Total Publications**: [Count if available]
+- **Journal Articles**: [Count if available]
+- **Conference Papers**: [Count if available]
+
+If metrics not available: "- Metrics data not available in sources"
+
+## PROFESSIONAL MEMBERSHIPS & AFFILIATIONS
+[If any professional society memberships or affiliations are mentioned, list them]
+
+## AWARDS, HONORS & RECOGNITION
+[List ALL awards, honors, grants, recognitions, or achievements mentioned]
+
+## EXTERNAL PROFILES & LINKS
+- **SINTA**: [Extract full URL if found, otherwise use: https://sinta.kemdikbud.go.id/authors/profile/]
+- **Google Scholar**: [Extract full URL if found]
+- **Scopus**: [Extract Author ID or URL if found]
+- **ORCID**: [Extract if found]
+- **ResearchGate**: [Extract if found]
+- **LinkedIn**: [Extract if found]
+- **University Profile**: [Extract if found]
+
+## CONTACT & ADDITIONAL INFORMATION
+[Any other relevant information not covered above]
 
 ---
 
-**CRITICAL INSTRUCTIONS:**
-1. Extract EVERY piece of information from the data sources provided
-2. For PUBLICATIONS section: Look carefully in the Google Scholar data and list actual paper titles
-3. For RESEARCH INTERESTS: Extract keywords, topics, and research areas mentioned
-4. For EDUCATION: Look for degree information (S1, S2, S3, Bachelor, Master, PhD, etc.)
-5. Do NOT write "Information not available" unless you truly cannot find ANY data
-6. If a section has data, include ALL of it (don't truncate)
-7. Clean up any HTML tags or formatting issues
-8. Use proper markdown formatting with bullet points (-)
-9. For publications, prioritize extracting actual titles from Google Scholar data
+**CRITICAL QUALITY STANDARDS:**
 
-Generate the complete CV now:"""
+1. **COMPLETENESS**: Extract EVERY piece of information from the data sources. Don't leave anything out.
+
+2. **PUBLICATIONS**: This is crucial! Look carefully through the Google Scholar data and extract:
+   - Complete paper titles (not truncated)
+   - All author names
+   - Journal/conference names
+   - Publication years
+   - Citation counts
+   - List at least 10-15 publications if available
+
+3. **DETAIL**: For each section, extract all available details. If a piece of information exists in the source data, include it in the CV.
+
+4. **RESEARCH INTERESTS**: Extract ALL keywords, topics, and research areas mentioned anywhere in the data. Be thorough.
+
+5. **EDUCATION**: Look for all degree information including:
+   - Degree types (S1, S2, S3, Bachelor, Master, PhD, etc.)
+   - Universities (both Indonesian and international)
+   - Years of graduation
+   - Thesis/dissertation titles if mentioned
+
+6. **NO PLACEHOLDERS**: Only write "Not available" if you truly cannot find ANY data for that specific field after thoroughly searching all sources.
+
+7. **FORMATTING**: Use proper markdown with:
+   - Bold (**text**) for emphasis
+   - Bullet points (-) for lists
+   - Proper headers (##, ###)
+   - Clean, professional layout
+
+8. **DATA EXTRACTION PRIORITY**:
+   - Look for actual content in DATABASE INFORMATION section first
+   - Then check GOOGLE SCHOLAR PUBLICATIONS section
+   - Extract publication titles, authors, years, citations
+   - Don't summarize - include full details
+
+Now generate the COMPLETE, DETAILED, COMPREHENSIVE CV:"""
 
     try:
         response = llm.call([{"role": "user", "content": prompt}])
