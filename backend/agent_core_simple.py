@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
 from crewai import Agent, Task, Crew, Process, LLM
-from tools import academic_search_tool, dynamic_web_scraper_tool, google_scholar_tool, sinta_scraper_tool, cv_generator_tool, ui_scholar_search_tool, pdf_search_tool
+from tools import academic_search_tool, dynamic_web_scraper_tool, google_scholar_tool, cv_generator_tool, ui_scholar_search_tool, pdf_search_tool
 import re
 
 load_dotenv()
@@ -89,21 +89,19 @@ class SimpleRAG:
     def _detect_query_type(self, query: str) -> str:
         """
         Classify query into 3 tiers:
-        - SIMPLE_LIST: Just list names/items from database
-        - BASIC_LOOKUP: Single person/topic lookup
-        - COMPLEX: Multi-step research needed
+        - SIMPLE_LIST: Just list names/items from database (NO external search needed)
+        - BASIC_LOOKUP: Single person lookup (NEEDS external search for enrichment)
+        - COMPLEX: Multi-step research needed (FULL CrewAI)
         """
         query_lower = query.lower()
         
-        # TIER 1: Simple list queries
+        # TIER 1: ONLY simple list queries that don't need external search
         simple_list_patterns = [
             r'\blist\s+(all|of)?\s*(the)?\s*lecturers?',
             r'\blist\s+(all|of)?\s*(the)?\s*professors?',
             r'\blist\s+(all|of)?\s*(the)?\s*faculty',
             r'\blist\s+(all|of)?\s*(the)?\s*staff',
             r'\blist\s+(all|of)?\s*(the)?\s*dosen',
-            r'\bgive\s+me\s+.*\blist\b.*\blecturers?',
-            r'\bshow\s+me\s+.*\blecturers?',
             r'\bsiapa\s+saja\s+dosen',
             r'\bdaftar\s+dosen',
         ]
@@ -112,23 +110,30 @@ class SimpleRAG:
             if re.search(pattern, query_lower):
                 return "SIMPLE_LIST"
         
-        # TIER 2: Basic lookup (specific person or simple fact)
-        basic_lookup_patterns = [
+        # TIER 2: Person lookup queries (use COMPLEX for better results with tools)
+        # Changed strategy: For specific person queries, use COMPLEX (TIER 3) to leverage SINTA/Scholar
+        person_lookup_patterns = [
             r'\bwho\s+is\b',
             r'\bsiapa\s+(itu)?\b',
             r'\btell\s+me\s+about\b',
             r'\binformation\s+about\b',
             r'\bprofile\s+of\b',
+            r'\bfind\s+.*(about|information)',
+            r'\bsearch\s+for\b',
+            r'\bresearch\s+by\b',
+            r'\bpublication.*by\b',
         ]
         
-        # Check if query is asking about specific person (capitalized name)
-        has_person_name = bool(re.search(r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b', query))
+        # Check if query mentions a specific person name
+        has_person_name = bool(re.search(r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b', query))
         
-        for pattern in basic_lookup_patterns:
-            if re.search(pattern, query_lower) or has_person_name:
-                return "BASIC_LOOKUP"
+        # If asking about specific person → Use COMPLEX tier for SINTA/Scholar enrichment
+        for pattern in person_lookup_patterns:
+            if re.search(pattern, query_lower) and has_person_name:
+                print(f"[ROUTING] Person query detected with name → Using COMPLEX tier for external search")
+                return "COMPLEX"
         
-        # TIER 3: Everything else (complex)
+        # TIER 3: Everything else (complex queries, comparisons, etc.)
         return "COMPLEX"
     
     def _direct_list_answer(self, query: str, vector_results: str) -> str:

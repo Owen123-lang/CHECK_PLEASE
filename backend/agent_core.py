@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
 from crewai import Agent, Task, Crew, Process, LLM
-from tools import academic_search_tool, dynamic_web_scraper_tool, google_scholar_tool, sinta_scraper_tool, cv_generator_tool, ui_scholar_search_tool, pdf_search_tool
+from tools import academic_search_tool, dynamic_web_scraper_tool, google_scholar_tool, cv_generator_tool, ui_scholar_search_tool, pdf_search_tool
 import re
 from collections import OrderedDict
 
@@ -316,7 +316,6 @@ Then I'll gather all available information and prepare the CV for download."""
                 ),
                 tools=[
                     academic_search_tool,
-                    sinta_scraper_tool,
                     google_scholar_tool,
                     dynamic_web_scraper_tool,
                     cv_generator_tool,
@@ -553,7 +552,6 @@ Please try again with a more specific question!"""
                 tools=[
                     pdf_search_tool,  # Put PDF tool FIRST for priority
                     academic_search_tool,
-                    sinta_scraper_tool,
                     google_scholar_tool,
                     dynamic_web_scraper_tool,
                     cv_generator_tool,

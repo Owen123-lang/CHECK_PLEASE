@@ -8,7 +8,6 @@ from dotenv import load_dotenv
 from crewai import Agent, Task, Crew, LLM
 from tools import (
     academic_search_tool,
-    sinta_scraper_tool,
     google_scholar_tool,
     web_search_tool,
     dynamic_web_scraper_tool
@@ -104,16 +103,7 @@ def simplified_cv_generation(professor_name: str, session_id: str = None) -> dic
     except Exception as e:
         print(f"  ✗ Database error: {e}")
     
-    print("\n[2/4] Collecting data from SINTA...")
-    try:
-        sinta_result = sinta_scraper_tool._run(professor_name)
-        collected_data['sinta'] = clean_tool_output(sinta_result, 800)
-        collected_data['raw_info'].update(extract_key_info(sinta_result))
-        print(f"  ✓ SINTA: {len(sinta_result)} chars → {len(collected_data['sinta'])} chars (cleaned)")
-    except Exception as e:
-        print(f"  ✗ SINTA error: {e}")
-    
-    print("\n[3/4] Collecting data from Google Scholar...")
+    print("\n[2/4] Collecting data from Google Scholar...")
     try:
         scholar_result = google_scholar_tool._run(professor_name)
         collected_data['scholar'] = clean_tool_output(scholar_result, 1200)
@@ -122,15 +112,12 @@ def simplified_cv_generation(professor_name: str, session_id: str = None) -> dic
         print(f"  ✗ Scholar error: {e}")
     
     # Step 2: Create compact context for LLM
-    print("\n[4/4] Generating CV with LLM...")
+    print("\n[3/4] Generating CV with LLM...")
     
     compact_context = f"""DATA SOURCES FOR {professor_name}:
 
 DATABASE:
 {collected_data['database'] or 'Not available'}
-
-SINTA PROFILE:
-{collected_data['sinta'] or 'Not available'}
 
 GOOGLE SCHOLAR:
 {collected_data['scholar'][:500] if collected_data['scholar'] else 'Not available'}
