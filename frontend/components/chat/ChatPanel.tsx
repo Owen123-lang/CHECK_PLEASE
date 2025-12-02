@@ -112,7 +112,7 @@ export default function ChatPanel({
       }
     } catch (err: any) {
       console.error("Chat error:", err);
-      const errorMessageContent = `⚠️ Error: ${err.message || 'Failed to get AI response'}. Make sure the AI backend is running at http://localhost:8000`;
+      const errorMessageContent = `⚠️ Error: ${err.message || 'Failed to get AI response'}. Please check your connection and try again.`;
       setError(errorMessageContent);
       
       const errorMessage: Message = {

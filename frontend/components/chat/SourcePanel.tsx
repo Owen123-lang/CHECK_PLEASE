@@ -2,6 +2,7 @@
 
 import { FileText, Plus, Upload, X, CheckCircle, Loader2, Download, FileUp, Trash2, MessageCircle } from 'lucide-react';
 import { useState, useRef } from 'react';
+import { API_ENDPOINTS } from '@/lib/api';
 
 interface PreviousChat {
   id: number;
@@ -73,7 +74,7 @@ export default function SourcePanel({
       console.log('[CV Export] Generating CV for:', professorName);
       console.log('[CV Export] Session ID:', sessionId);
       
-      const response = await fetch("http://127.0.0.1:8000/api/generate-cv", {
+      const response = await fetch(API_ENDPOINTS.AI_GENERATE_CV, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
@@ -135,7 +136,7 @@ export default function SourcePanel({
         formData.append('session_id', sessionId);
       }
 
-      const response = await fetch('http://127.0.0.1:8000/api/upload-pdf', {
+      const response = await fetch(API_ENDPOINTS.AI_UPLOAD_PDF, {
         method: 'POST',
         body: formData,
       });
