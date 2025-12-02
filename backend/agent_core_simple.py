@@ -162,8 +162,8 @@ class SimpleRAG:
             if any(noise in match for noise in ['LECTURER', 'PROFESSOR', 'ASSISTANT', 'ASSOCIATE', 'EMERITUS', 'ADJUNCT']):
                 continue
             
-            # Validate and add
-            if len(match) > 15 and ',' in match:  # Must have name + degree
+            # Relaxed validation: just need comma (indicates degree)
+            if ',' in match and len(match) > 10:
                 names.add(match)
                 print(f"[TIER 1]   ✓ {match}")
         
