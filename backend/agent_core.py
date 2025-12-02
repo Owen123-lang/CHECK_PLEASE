@@ -548,6 +548,7 @@ Please try again with a more specific question!"""
                     "7. IMPORTANT: Pay attention to conversation history to understand pronouns like 'his/her/their'\n"
                     "8. CRITICAL: When asked for publications, extract ALL publications mentioned in the context data\n"
                     "9. **NEW: When user asks about PDF/document they uploaded, use 'User PDF Search Tool' to find information**\n"
+                    "10. **CRITICAL: If database/Scholar returns empty or irrelevant results, provide a helpful error message immediately - DO NOT keep trying**\n"
                 ),
                 tools=[
                     pdf_search_tool,  # Put PDF tool FIRST for priority
@@ -560,7 +561,7 @@ Please try again with a more specific question!"""
                 llm=self.llm,
                 verbose=True,
                 allow_delegation=False,
-                max_iter=3,
+                max_iter=5,  # Increased from 3 to 5 to allow more attempts
             )
             
             # Build task description with context
