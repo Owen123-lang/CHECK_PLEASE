@@ -586,6 +586,167 @@ async def upload_pdf(file: UploadFile = File(...), session_id: str = Form(None))
             }
         )
 
+@app.post("/api/upload-url")
+async def upload_url(url: str = Form(...), session_id: str = Form(None)):
+    """
+    Scrape and process a URL. Extracts text content and stores in vector database.
+    
+    This allows users to add website URLs and ask questions about their content.
+    The AI will use the User URL Search Tool to answer questions based on scraped content.
+    
+    IMPORTANT: session_id is REQUIRED to ensure URL content is only accessible in that session.
+    """
+    try:
+        print(f"\n{'='*60}")
+        print(f"[URL UPLOAD] Processing URL: {url}")
+        print(f"[URL UPLOAD] Session ID: {session_id}")
+        
+        # CRITICAL: session_id is REQUIRED
+        if not session_id:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "session_id is required for URL upload"}
+            )
+        
+        print(f"{'='*60}")
+        
+        # Validate URL format
+        if not url.startswith(('http://', 'https://')):
+            return JSONResponse(
+                status_code=400,
+                content={"error": "Invalid URL. Must start with http:// or https://"}
+            )
+        
+        # Scrape website content
+        print("[URL UPLOAD] Scraping website content...")
+        import requests
+        from bs4 import BeautifulSoup
+        
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+        
+        try:
+            response = requests.get(url, headers=headers, timeout=10)
+            response.raise_for_status()
+        except requests.RequestException as e:
+            return JSONResponse(
+                status_code=400,
+                content={"error": f"Failed to fetch URL: {str(e)}"}
+            )
+        
+        # Parse HTML and extract text
+        soup = BeautifulSoup(response.content, 'html.parser')
+        
+        # Remove script and style elements
+        for script in soup(["script", "style", "nav", "footer", "header"]):
+            script.decompose()
+        
+        # Get text
+        text = soup.get_text(separator='\n', strip=True)
+        
+        # Clean up text
+        lines = (line.strip() for line in text.splitlines())
+        chunks_text = '\n'.join(chunk for line in lines for chunk in (line,) if chunk)
+        
+        if not chunks_text.strip():
+            return JSONResponse(
+                status_code=400,
+                content={"error": "Could not extract text from URL. The page might be JavaScript-heavy or protected."}
+            )
+        
+        print(f"[URL UPLOAD] Extracted {len(chunks_text)} characters")
+        
+        # Chunk the text for better search
+        print("[URL UPLOAD] Chunking text...")
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=1000,
+            chunk_overlap=200,
+            separators=["\n\n", "\n", ". ", " ", ""]
+        )
+        
+        text_chunks = text_splitter.split_text(chunks_text)
+        print(f"[URL UPLOAD] Created {len(text_chunks)} chunks")
+        
+        # Initialize embedding model
+        print("[URL UPLOAD] Generating embeddings...")
+        embeddings = GoogleGenerativeAIEmbeddings(
+            model="models/embedding-001",
+            google_api_key=os.getenv("GEMINI_API_KEY")
+        )
+        
+        # Connect to Astra DB
+        client = DataAPIClient(os.getenv("ASTRA_DB_APPLICATION_TOKEN"))
+        db = client.get_database_by_api_endpoint(os.getenv("ASTRA_DB_API_ENDPOINT"))
+        collection = db.get_collection(os.getenv("ASTRA_DB_COLLECTION", "academic_profiles_ui"))
+        
+        # Store chunks in database with embeddings
+        print("[URL UPLOAD] Storing in vector database...")
+        stored_count = 0
+        
+        for i, chunk in enumerate(text_chunks):
+            try:
+                # Generate embedding for this chunk
+                embedding = embeddings.embed_query(chunk)
+                
+                # Generate unique ID
+                unique_id = f"{session_id}_{uuid.uuid4().hex[:12]}_url_{i}"
+                
+                # Create document
+                doc = {
+                    "_id": unique_id,
+                    "text": chunk,
+                    "url": url,
+                    "source_type": "user_url",
+                    "session_id": session_id,
+                    "uploaded_at": datetime.now().isoformat(),
+                    "$vector": embedding
+                }
+                
+                # Insert with retry logic for duplicates
+                try:
+                    collection.insert_one(doc)
+                    stored_count += 1
+                    
+                    if (i + 1) % 10 == 0:
+                        print(f"[URL UPLOAD]   Stored {i + 1}/{len(text_chunks)} chunks...")
+                except Exception as insert_error:
+                    if "DOCUMENT_ALREADY_EXISTS" in str(insert_error):
+                        doc["_id"] = f"{session_id}_{uuid.uuid4().hex[:12]}_url_{i}_{int(datetime.now().timestamp())}"
+                        collection.insert_one(doc)
+                        stored_count += 1
+                        print(f"[URL UPLOAD]   Retried chunk {i} with new ID")
+                    else:
+                        raise insert_error
+                    
+            except Exception as e:
+                print(f"[URL UPLOAD] Error storing chunk {i}: {e}")
+                continue
+        
+        print(f"[URL UPLOAD] ✅ Successfully stored {stored_count}/{len(text_chunks)} chunks")
+        print(f"{'='*60}\n")
+        
+        return {
+            "success": True,
+            "url": url,
+            "chunks_stored": stored_count,
+            "total_characters": len(chunks_text),
+            "message": f"URL content scraped successfully! You can now ask questions about it.",
+            "session_id": session_id
+        }
+        
+    except Exception as e:
+        print(f"\n[ERROR] URL Upload failed: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": str(e),
+                "message": "Failed to process URL. Please try again with a different URL."
+            }
+        )
+
 @app.get("/api/session/{session_id}")
 async def get_session_info(session_id: str):
     """Get session conversation history."""
