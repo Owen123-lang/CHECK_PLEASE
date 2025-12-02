@@ -223,7 +223,41 @@ class SimpleRAG:
         """
         print("[TIER 2] Using LLM to format database results...")
         
-        prompt = f"""You are an academic assistant. Answer this query based ONLY on the provided database information.
+        # Check if this is a list query
+        query_lower = query.lower()
+        is_list_query = any(keyword in query_lower for keyword in ['list', 'all', 'daftar', 'semua'])
+        
+        if is_list_query:
+            prompt = f"""Extract and list ALL lecturer names from the database information below.
+
+Query: {query}
+
+Database Information:
+{vector_results}
+
+CRITICAL INSTRUCTIONS:
+1. Extract COMPLETE names only (e.g., "Dr. Abdul Muis., ST., M.Eng.")
+2. Skip INCOMPLETE names (e.g., "F. Astha" without full name)
+3. Remove EXACT duplicates (e.g., if "Tomy Abuzairi" and "Abuzairi" both appear, keep only the longer one)
+4. Format as a clean numbered list
+5. Group by academic title: Professors (Prof.) first, then Doctors (Dr.), then Lecturers
+6. DO NOT add position or research areas - NAMES ONLY
+7. DO NOT include partial names, truncated names, or incomplete entries
+
+Output format:
+## Professors
+1. [Full name with all titles and degrees]
+2. [Full name with all titles and degrees]
+
+## Doctors & Senior Lecturers
+1. [Full name with all titles and degrees]
+
+## Lecturers
+1. [Full name with all titles and degrees]
+
+Extract names now:"""
+        else:
+            prompt = f"""You are an academic assistant. Answer this query based ONLY on the provided database information.
 
 Query: {query}
 
