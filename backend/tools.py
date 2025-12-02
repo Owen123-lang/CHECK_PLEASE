@@ -1116,6 +1116,7 @@ class EngUIPersonnelScraperTool(BaseTool):
 class PDFSearchInput(BaseModel):
     """Input schema for PDF Search Tool."""
     query: str = Field(..., description="Search query to find information within uploaded PDF documents")
+    session_id: str = Field(default=None, description="Optional session ID to filter PDFs by user session")
 
 
 class PDFSearchTool(BaseTool):
@@ -1124,12 +1125,13 @@ class PDFSearchTool(BaseTool):
         "Searches through user-uploaded PDF documents for relevant information. "
         "This tool ONLY works if the user has uploaded PDF files. "
         "Use this when user asks questions about their uploaded documents. "
-        "Returns relevant text excerpts from the uploaded PDFs that match the query."
+        "Returns relevant text excerpts from the uploaded PDFs that match the query. "
+        "IMPORTANT: If no results found, tell user to upload PDF first."
     )
     args_schema: Type[BaseModel] = PDFSearchInput
 
-    def _run(self, query: str) -> str:
-        """Search through uploaded PDF content stored in database."""
+    def _run(self, query: str, session_id: str = None) -> str:
+        """Search through uploaded PDF content stored in database with optional session filtering."""
         if embeddings is None:
             return "Error: Embedding model failed to initialize."
             
@@ -1140,30 +1142,55 @@ class PDFSearchTool(BaseTool):
 
             query_vector = embeddings.embed_query(query)
             
-            # Search for PDF content specifically
+            # Build filter - try with session_id first, then fall back to all user PDFs
+            filter_query = {"source_type": "user_pdf"}
+            if session_id:
+                filter_query["session_id"] = session_id
+                print(f"[PDF_SEARCH] Filtering by session_id: {session_id}")
+            else:
+                print("[PDF_SEARCH] No session_id provided, searching all user PDFs")
+            
+            # Search for PDF content
             results = collection.find(
-                filter={"source_type": "user_pdf"},
+                filter=filter_query,
                 sort={"$vector": query_vector},
-                limit=10,
+                limit=15,  # Increased from 10 to 15 for better coverage
                 projection={"*": 1}
             )
 
             docs = list(results)
             
             print(f"[PDF_SEARCH] Query: {query}")
+            print(f"[PDF_SEARCH] Session filter: {session_id or 'None (all PDFs)'}")
             print(f"[PDF_SEARCH] Found {len(docs)} PDF chunks")
             
             if not docs:
-                return "⚠️ No uploaded PDF documents found. Please upload a PDF file first using the 'Add New Source' button."
+                if session_id:
+                    # Try again without session filter (fallback)
+                    print("[PDF_SEARCH] No results with session_id, trying without filter...")
+                    results_fallback = collection.find(
+                        filter={"source_type": "user_pdf"},
+                        sort={"$vector": query_vector},
+                        limit=15,
+                        projection={"*": 1}
+                    )
+                    docs = list(results_fallback)
+                    
+                    if not docs:
+                        return "⚠️ **No PDF documents found.**\n\nPlease upload a PDF file first. You can:\n1. Click 'Add New Source' button\n2. Upload your PDF document\n3. Then ask questions about it!"
+                    else:
+                        print(f"[PDF_SEARCH] Fallback found {len(docs)} chunks from other sessions")
+                else:
+                    return "⚠️ **No PDF documents found.**\n\nPlease upload a PDF file first using the 'Add New Source' button."
             
             context_parts = []
             pdf_files = set()
             
             for idx, doc in enumerate(docs):
                 content = (
-                    doc.get('text') or 
-                    doc.get('content') or 
-                    doc.get('page_content') or 
+                    doc.get('text') or
+                    doc.get('content') or
+                    doc.get('page_content') or
                     str(doc)
                 )
                 
@@ -1178,15 +1205,17 @@ class PDFSearchTool(BaseTool):
             context = "\n\n---\n\n".join(context_parts)
             
             result = f"📄 **Information from {len(pdf_files)} uploaded PDF(s):**\n\n"
-            result += f"Files: {', '.join(pdf_files)}\n\n"
-            result += f"**Relevant Content:**\n\n{context}"
+            result += f"**Files:** {', '.join(pdf_files)}\n\n"
+            result += f"**Relevant Content from the PDF:**\n\n{context}"
             
-            print(f"[PDF_SEARCH] Total context: {len(context)} characters from {len(pdf_files)} files")
+            print(f"[PDF_SEARCH] ✅ Total context: {len(context)} characters from {len(pdf_files)} files")
             return result
             
         except Exception as e:
             print(f"[PDF_SEARCH ERROR] {e}")
-            return f"Error searching PDF documents: {e}"
+            import traceback
+            traceback.print_exc()
+            return f"❌ Error searching PDF documents: {str(e)}\n\nPlease try uploading the PDF again or contact support."
 
 
 # Initialize tool instances

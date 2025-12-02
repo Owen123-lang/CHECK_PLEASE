@@ -36,7 +36,7 @@ class SimpleRAG:
             max_tokens=2000,  # Pro has better capacity
         )
     
-    def query(self, user_query: str, user_urls: list = None, conversation_history: list = None) -> str:
+    def query(self, user_query: str, user_urls: list = None, conversation_history: list = None, session_id: str = None) -> str:
         """
         Smart routing based on query complexity.
         """
@@ -67,7 +67,7 @@ class SimpleRAG:
             else:
                 # TIER 3: Full multi-agent
                 print("[TIER 3] 🤖 Complex query - Full CrewAI agents")
-                result = self._complex_query(user_query, vector_results, conversation_history)
+                result = self._complex_query(user_query, vector_results, conversation_history, session_id)
             
             # Post-processing
             print("\n[POST-PROCESSING] 🧹 Cleaning output...")
@@ -287,7 +287,7 @@ Answer:"""
             # Fallback to raw results
             return f"Based on database:\n\n{vector_results[:1000]}"
     
-    def _complex_query(self, query: str, vector_results: str, conversation_history: list = None) -> str:
+    def _complex_query(self, query: str, vector_results: str, conversation_history: list = None, session_id: str = None) -> str:
         """
         TIER 3: Complex query with full CrewAI multi-agent system.
         """
@@ -296,7 +296,7 @@ Answer:"""
         # Use existing complex agent logic
         from agent_core import HybridRAG
         hybrid_rag = HybridRAG()
-        return hybrid_rag.query(query, user_urls=None, conversation_history=conversation_history)
+        return hybrid_rag.query(query, user_urls=None, conversation_history=conversation_history, session_id=session_id)
     
     def _vector_search(self, query: str) -> str:
         """Search the Astra DB vector database."""
@@ -416,9 +416,9 @@ def get_simple_rag():
         _simple_rag = SimpleRAG()
     return _simple_rag
 
-def run_simple_rag(user_query: str, user_urls: list = None, conversation_history: list = None) -> str:
+def run_simple_rag(user_query: str, user_urls: list = None, conversation_history: list = None, session_id: str = None) -> str:
     """
     Main entry point for simplified RAG system.
     """
     simple_rag = SimpleRAG()
-    return simple_rag.query(user_query, user_urls, conversation_history)
+    return simple_rag.query(user_query, user_urls, conversation_history, session_id)

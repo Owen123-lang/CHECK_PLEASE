@@ -7,6 +7,20 @@ from collections import OrderedDict
 
 load_dotenv()
 
+# Global variable to store current session_id for PDF search
+_current_session_id = None
+
+def set_session_context(session_id: str):
+    """Set the current session ID for PDF search context."""
+    global _current_session_id
+    _current_session_id = session_id
+    print(f"[SESSION_CONTEXT] Set session_id: {session_id}")
+
+def get_session_context() -> str:
+    """Get the current session ID."""
+    global _current_session_id
+    return _current_session_id
+
 class HybridRAG:
     """
     HYBRID RAG System:
@@ -27,7 +41,7 @@ class HybridRAG:
             max_tokens=2000,
         )
     
-    def query(self, user_query: str, user_urls: list = None, conversation_history: list = None) -> str:
+    def query(self, user_query: str, user_urls: list = None, conversation_history: list = None, session_id: str = None) -> str:
         """
         Process a user query using the Hybrid RAG system.
         
@@ -35,15 +49,22 @@ class HybridRAG:
             user_query: The user's question
             user_urls: Optional URLs to scrape for additional context
             conversation_history: Previous conversation for context
+            session_id: Session ID for PDF search filtering
         
         Returns:
             AI-generated response
         """
         try:
+            # Set session context for PDF search
+            if session_id:
+                set_session_context(session_id)
+            
             print("\n" + "=" * 70)
             print("🚀 HYBRID RAG QUERY PROCESSING")
             print("=" * 70)
             print(f"📝 Query: {user_query}")
+            if session_id:
+                print(f"🔑 Session ID: {session_id}")
             
             # NEW: Resolve pronouns using conversation history
             if conversation_history:
@@ -872,7 +893,7 @@ def get_rag():
         _rag = HybridRAG()
     return _rag
 
-def run_agentic_rag_crew(user_query: str, user_urls: list = None, conversation_history: list = None) -> str:
+def run_agentic_rag_crew(user_query: str, user_urls: list = None, conversation_history: list = None, session_id: str = None) -> str:
     """
     Main entry point for the Hybrid RAG system.
     
@@ -880,9 +901,10 @@ def run_agentic_rag_crew(user_query: str, user_urls: list = None, conversation_h
         user_query: The user's question
         user_urls: Optional list of URLs to scrape
         conversation_history: Previous conversation messages for context
+        session_id: Session ID for PDF search filtering
     
     Returns:
         AI-generated response
     """
     hybrid_rag = HybridRAG()
-    return hybrid_rag.query(user_query, user_urls, conversation_history)
+    return hybrid_rag.query(user_query, user_urls, conversation_history, session_id)

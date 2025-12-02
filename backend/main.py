@@ -244,8 +244,8 @@ async def handle_chat_query(request: QueryRequest):
             print("[API]   • TIER 3: Full CrewAI for complex queries")
             print(f"{'='*60}\n")
             
-            # Use simplified routing system for better efficiency
-            result = run_simple_rag(request.message, request.user_urls, conversation_history)
+            # Use simplified routing system for better efficiency (with session_id for PDF search)
+            result = run_simple_rag(request.message, request.user_urls, conversation_history, session_id)
             
             print(f"\n{'='*60}")
             print(f"[API] Agent completed! Response length: {len(str(result))} chars")
