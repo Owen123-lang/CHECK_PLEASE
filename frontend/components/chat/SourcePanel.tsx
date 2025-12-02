@@ -58,9 +58,11 @@ export default function SourcePanel({
     try {
       const formData = new FormData();
       formData.append('file', file);
-      if (sessionId) {
-        formData.append('session_id', sessionId);
-      }
+      
+      // CRITICAL: session_id is REQUIRED by backend
+      // If no sessionId prop, generate a temporary one for this upload session
+      const uploadSessionId = sessionId || `upload_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+      formData.append('session_id', uploadSessionId);
 
       const response = await fetch(API_ENDPOINTS.AI_UPLOAD_PDF, {
         method: 'POST',
