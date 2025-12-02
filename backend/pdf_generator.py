@@ -77,6 +77,8 @@ def parse_markdown_cv(markdown_text: str) -> dict:
         text_lower = text.lower().strip()
         return text_lower and len(text_lower) > 3 and not any(phrase in text_lower for phrase in invalid_phrases)
     
+    current_subsection = None
+    
     for line in lines:
         line = line.strip()
         if not line:
@@ -91,75 +93,106 @@ def parse_markdown_cv(markdown_text: str) -> dict:
         # Parse section headers (## SECTION)
         if line.startswith('## '):
             current_section = line[3:].strip().upper()
+            current_subsection = None
             print(f"[MARKDOWN PARSER] → Section: {current_section}")
             continue
         
-        # Parse bullet points and values
+        # Parse subsection headers (### Subsection)
+        if line.startswith('### '):
+            current_subsection = line[4:].strip().upper()
+            print(f"[MARKDOWN PARSER]   → Subsection: {current_subsection}")
+            continue
+        
+        # Parse bullet points and values based on section/subsection
         if current_section == 'PERSONAL INFORMATION':
-            if line.startswith('- Position:'):
-                title = line.split(':', 1)[1].strip()
+            if line.startswith('- **Position'):
+                title = line.split(':', 1)[1].strip() if ':' in line else ''
                 if is_valid_data(title):
                     cv_data['title'] = title
-            elif line.startswith('- Affiliation:'):
-                affiliation = line.split(':', 1)[1].strip()
+            elif line.startswith('- **Affiliation'):
+                affiliation = line.split(':', 1)[1].strip() if ':' in line else ''
                 if is_valid_data(affiliation):
-                    # Extract department if present
-                    if 'Departemen' in affiliation:
-                        dept_match = re.search(r'Departemen[^,]+', affiliation)
-                        if dept_match:
-                            cv_data['department'] = dept_match.group(0)
-            elif line.startswith('- Born:'):
-                birth = line.split(':', 1)[1].strip()
+                    cv_data['affiliation'] = affiliation
+            elif line.startswith('- **Department'):
+                dept = line.split(':', 1)[1].strip() if ':' in line else ''
+                if is_valid_data(dept):
+                    cv_data['department'] = dept
+            elif line.startswith('- **Born'):
+                birth = line.split(':', 1)[1].strip() if ':' in line else ''
                 if is_valid_data(birth):
                     cv_data['birth_info'] = birth
-            elif line.startswith('- Email:'):
-                email = line.split(':', 1)[1].strip()
+            elif line.startswith('- **Email'):
+                email = line.split(':', 1)[1].strip() if ':' in line else ''
                 if is_valid_data(email):
                     cv_data['email'] = email
         
+        elif current_section == 'ACADEMIC BACKGROUND':
+            # Handle "### Education History" subsection
+            if current_subsection == 'EDUCATION HISTORY' or current_section == 'ACADEMIC BACKGROUND':
+                if line.startswith('- **'):
+                    # Format: "- **Degree** - Institution, Year"
+                    edu = line[2:].strip()
+                    edu = re.sub(r'\*\*([^*]+)\*\*', r'\1', edu)  # Remove bold
+                    if is_valid_data(edu):
+                        cv_data['education'].append(edu)
+        
         elif current_section == 'EDUCATION':
+            # Legacy format support
             if line.startswith('- '):
                 edu = line[2:].strip()
                 if is_valid_data(edu):
                     cv_data['education'].append(edu)
         
-        elif current_section == 'CURRENT POSITIONS':
+        elif current_section in ['CURRENT POSITIONS', 'CURRENT POSITIONS & ROLES']:
             if line.startswith('- '):
                 pos = line[2:].strip()
+                pos = re.sub(r'\*\*([^*]+)\*\*', r'\1', pos)  # Remove bold
                 if is_valid_data(pos):
                     cv_data['positions'].append(pos)
         
-        elif current_section == 'RESEARCH INTERESTS':
+        elif current_section in ['RESEARCH INTERESTS', 'RESEARCH INTERESTS & EXPERTISE']:
+            # Handle both direct bullets and subsections (Primary Areas, Specialized Topics, etc)
             if line.startswith('- '):
                 research = line[2:].strip()
+                research = re.sub(r'\*\*([^*]+)\*\*', r'\1', research)  # Remove bold
                 if is_valid_data(research):
                     cv_data['research_areas'].append(research)
         
-        elif current_section == 'PUBLICATIONS':
-            # Support both numbered lists AND bullet points with bold
-            if re.match(r'^\d+\.', line):  # Numbered list: "1. Title"
+        elif current_section in ['PUBLICATIONS', 'PUBLICATIONS & SCHOLARLY WORKS']:
+            # Support multiple formats:
+            # 1. Numbered list: "1. Title (Year)"
+            # 2. Bullet with bold: "- **Title** - Authors, Journal (Year)"
+            # 3. Under subsections: "### Journal Articles", "### Conference Papers"
+            
+            if re.match(r'^\d+\.', line):  # Numbered list
                 pub = re.sub(r'^\d+\.\s*', '', line).strip()
-                if is_valid_data(pub):
+                pub = re.sub(r'\*\*([^*]+)\*\*', r'\1', pub)  # Remove bold
+                if is_valid_data(pub) and len(pub) > 15:
                     cv_data['publications'].append(pub)
-            elif line.startswith('- **') or line.startswith('- '):  # Bullet with bold: "- **Title** Authors:"
-                # Extract title from bold markdown or full line
-                pub = line[2:].strip()  # Remove "- "
-                # Clean markdown bold syntax
-                pub = re.sub(r'\*\*([^*]+)\*\*', r'\1', pub)
-                if is_valid_data(pub) and len(pub) > 20:
+            elif line.startswith('- '):
+                pub = line[2:].strip()
+                pub = re.sub(r'\*\*([^*]+)\*\*', r'\1', pub)  # Remove bold
+                if is_valid_data(pub) and len(pub) > 15:
                     cv_data['publications'].append(pub)
         
-        elif current_section == 'ACADEMIC METRICS':
+        elif current_section in ['ACADEMIC METRICS', 'ACADEMIC METRICS & IMPACT']:
             if 'SINTA Score:' in line or 'sinta score:' in line.lower():
                 score_match = re.search(r'SINTA Score[:\s]+([0-9.]+)', line, re.IGNORECASE)
                 if score_match:
                     cv_data['sinta_score'] = score_match.group(1)
-            elif 'Google Scholar Citations:' in line or 'citations:' in line.lower():
+            elif 'H-Index:' in line or 'h-index:' in line.lower():
+                h_match = re.search(r'H-Index[:\s]+([0-9]+)', line, re.IGNORECASE)
+                if h_match:
+                    cv_data['google_scholar'] = f"H-Index: {h_match.group(1)}"
+            elif 'Citations:' in line or 'Total Citations:' in line:
                 citations_match = re.search(r'Citations[:\s]+([0-9,]+)', line, re.IGNORECASE)
                 if citations_match:
-                    cv_data['google_scholar'] = citations_match.group(1)
+                    if cv_data['google_scholar']:
+                        cv_data['google_scholar'] += f", Citations: {citations_match.group(1)}"
+                    else:
+                        cv_data['google_scholar'] = f"Citations: {citations_match.group(1)}"
         
-        elif current_section == 'EXTERNAL PROFILES':
+        elif current_section in ['EXTERNAL PROFILES', 'EXTERNAL PROFILES & LINKS']:
             if 'SINTA:' in line:
                 url_match = re.search(r'https?://[^\s]+', line)
                 if url_match:
