@@ -21,7 +21,7 @@ class HybridRAG:
             raise ValueError("GEMINI_API_KEY not found")
         
         self.llm = LLM(
-            model="gemini/gemini-1.5-pro",
+            model="gemini/gemini-2.5-pro",
             api_key=api_key,
             temperature=0.2,
             max_tokens=2000,

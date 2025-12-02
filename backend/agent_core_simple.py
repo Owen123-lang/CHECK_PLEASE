@@ -30,7 +30,7 @@ class SimpleRAG:
             raise ValueError("GEMINI_API_KEY not found")
         
         self.llm = LLM(
-            model="gemini/gemini-1.5-pro",
+            model="gemini/gemini-2.5-pro",
             api_key=api_key,
             temperature=0.1,  # Lower for more deterministic output
             max_tokens=2000,  # Pro has better capacity
