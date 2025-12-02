@@ -155,17 +155,22 @@ class SimpleRAG:
         
         print(f"[TIER 1] Found {len(matches)} raw matches")
         
+        for idx, match in enumerate(matches[:5]):  # Debug: show first 5
+            print(f"[TIER 1 DEBUG] Match {idx+1}: '{match[:80]}...' (len={len(match)})")
+        
         for match in matches:
             match = match.strip()
             
             # Skip if it's a noise word
             if any(noise in match for noise in ['LECTURER', 'PROFESSOR', 'ASSISTANT', 'ASSOCIATE', 'EMERITUS', 'ADJUNCT']):
+                print(f"[TIER 1 SKIP] Noise word: {match[:40]}")
                 continue
             
             # Relaxed validation: just need comma (indicates degree)
             if ',' in match and len(match) > 10:
                 names.add(match)
-                print(f"[TIER 1]   ✓ {match}")
+            else:
+                print(f"[TIER 1 SKIP] No comma or too short: {match[:40]}")
         
         if not names:
             return "⚠️ No lecturers found in database. Please try a different query."
