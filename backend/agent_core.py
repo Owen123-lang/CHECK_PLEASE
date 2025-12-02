@@ -389,22 +389,31 @@ Answer concisely with ONLY academic and professional information:""",
             return self._emergency_fallback(query)
     
     def _filter_personal_info(self, text: str) -> str:
-        """Remove any personal information that slipped through."""
-        print("[FILTER] Checking for personal information...")
+        """
+        Remove FAMILY-RELATED personal information ONLY.
+        DO NOT remove professional positions, academic titles, or career info.
         
-        # STRICT keywords that DEFINITELY indicate personal info (not academic)
-        # IMPORTANT: These must appear WITH context, not standalone
-        personal_keywords = [
-            ('born on', 'tanggal lahir'),  # Birth date with specific date
-            ('married to', 'menikah dengan'),  # Marriage info
-            ('has children', 'memiliki anak'),  # Children info
-            ('family member', 'anggota keluarga'),  # Family references
-            ('personal life', 'kehidupan pribadi'),  # Personal life
-            ('spouse', 'pasangan'),  # Spouse info
-            ('wife', 'istri'),  # Wife
-            ('husband', 'suami'),  # Husband
-            ('daughter', 'putri'),  # Daughter
-            ('son', 'putra'),  # Son
+        Personal Info = Family (spouse, children, parents, siblings)
+        NOT Personal Info = Professional roles (Professor, Chairperson, Director, etc.)
+        """
+        print("[FILTER] Checking for personal FAMILY information...")
+        
+        # VERY STRICT: Only FAMILY-related keywords
+        # These patterns require CONTEXT to avoid false positives
+        family_patterns = [
+            # Birth date with specific date (e.g., "born on 15 March 1980")
+            r'(?:born on|lahir pada|tanggal lahir:?)\s+\d{1,2}',
+            # Marriage info with person's name
+            r'(?:married to|menikah dengan)\s+[A-Z]',
+            # Children with count/names
+            r'(?:has|memiliki)\s+\d+\s+(?:children|anak)',
+            r'(?:son|daughter|putra|putri)(?:\s+named|\s+bernama)',
+            # Family member references
+            r'(?:family member|anggota keluarga)',
+            r'(?:personal life|kehidupan pribadi)',
+            # Spouse references (with context)
+            r'(?:his|her)\s+(?:wife|husband|spouse|istri|suami)',
+            r'(?:wife|husband|spouse|istri|suami)(?:\s+is|\s+named|\s+bernama)',
         ]
         
         lines = text.split('\n')
@@ -413,16 +422,31 @@ Answer concisely with ONLY academic and professional information:""",
         for line in lines:
             line_lower = line.lower()
             
-            # Check if line contains personal info keywords
-            is_personal = any(
-                any(kw in line_lower for kw in keyword_pair)
-                for keyword_pair in personal_keywords
+            # Check ONLY for family-related patterns with context
+            is_family_info = any(
+                re.search(pattern, line, re.IGNORECASE)
+                for pattern in family_patterns
             )
             
-            if not is_personal:
-                filtered_lines.append(line)
+            #  FALSE POSITIVE PREVENTION:
+            # If line contains professional keywords, DON'T filter it even if it has "wife"/"husband" etc
+            professional_keywords = [
+                'professor', 'lecturer', 'director', 'chairperson', 'chair',
+                'cio', 'head', 'dean', 'coordinator', 'secretary', 'member',
+                'founder', 'president', 'vice', 'assistant', 'associate',
+                'professor', 'dosen', 'guru besar', 'ketua', 'sekretaris',
+                'koordinator', 'anggota', 'reviewer', 'committee', 'board'
+            ]
+            
+            has_professional_keyword = any(
+                keyword in line_lower for keyword in professional_keywords
+            )
+            
+            # ONLY filter if it's family info AND NOT professional role
+            if is_family_info and not has_professional_keyword:
+                print(f"  [REMOVED] Family info: {line[:80]}...")
             else:
-                print(f"  [REMOVED] Personal info: {line[:80]}...")
+                filtered_lines.append(line)
         
         result = '\n'.join(filtered_lines)
         print(f"  ✓ Personal info filter complete")

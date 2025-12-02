@@ -309,24 +309,46 @@ Answer:"""
             return ""
     
     def _filter_personal_info(self, text: str) -> str:
-        """Remove personal information."""
-        personal_keywords = [
-            ('born on', 'tanggal lahir'),
-            ('married to', 'menikah dengan'),
-            ('has children', 'memiliki anak'),
+        """
+        Remove FAMILY-RELATED personal information ONLY.
+        DO NOT remove professional positions, academic titles, or career info.
+        """
+        # VERY STRICT: Only FAMILY-related patterns
+        family_patterns = [
+            r'(?:born on|lahir pada|tanggal lahir:?)\s+\d{1,2}',
+            r'(?:married to|menikah dengan)\s+[A-Z]',
+            r'(?:has|memiliki)\s+\d+\s+(?:children|anak)',
+            r'(?:son|daughter|putra|putri)(?:\s+named|\s+bernama)',
+            r'(?:family member|anggota keluarga)',
+            r'(?:personal life|kehidupan pribadi)',
+            r'(?:his|her)\s+(?:wife|husband|spouse|istri|suami)',
+            r'(?:wife|husband|spouse|istri|suami)(?:\s+is|\s+named|\s+bernama)',
         ]
         
         lines = text.split('\n')
         filtered_lines = []
         
         for line in lines:
-            line_lower = line.lower()
-            is_personal = any(
-                any(kw in line_lower for kw in keyword_pair)
-                for keyword_pair in personal_keywords
+            # Check ONLY for family-related patterns
+            is_family_info = any(
+                re.search(pattern, line, re.IGNORECASE)
+                for pattern in family_patterns
             )
             
-            if not is_personal:
+            # FALSE POSITIVE PREVENTION: Don't filter professional roles
+            professional_keywords = [
+                'professor', 'lecturer', 'director', 'chairperson', 'chair',
+                'cio', 'head', 'dean', 'coordinator', 'secretary', 'member',
+                'founder', 'president', 'vice', 'assistant', 'associate',
+                'dosen', 'guru besar', 'ketua', 'sekretaris', 'reviewer'
+            ]
+            
+            has_professional_keyword = any(
+                keyword in line.lower() for keyword in professional_keywords
+            )
+            
+            # ONLY filter if it's family info AND NOT professional role
+            if not (is_family_info and not has_professional_keyword):
                 filtered_lines.append(line)
         
         return '\n'.join(filtered_lines)

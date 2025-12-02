@@ -17,12 +17,12 @@ import re
 
 load_dotenv()
 
-# Initialize LLM for agents with higher token limit for detailed CVs
+# Initialize LLM for agents with MUCH higher token limit for comprehensive CVs
 llm = LLM(
     model="gemini/gemini-2.0-flash-exp",
     api_key=os.getenv("GEMINI_API_KEY"),
-    temperature=0.3,
-    max_tokens=8000,  # Increased for more detailed output
+    temperature=0.1,  # Lower temperature = more factual, less creative
+    max_tokens=16000,  # DOUBLED - need space for 15-20 publications
 )
 
 def clean_tool_output(text: str, max_chars: int = 3500) -> str:
@@ -144,11 +144,35 @@ SINTA Score: {collected_data['raw_info'].get('sinta_score', 'Not available')}
 Research Areas: {', '.join(collected_data['raw_info'].get('research_areas', [])) or 'Not available'}
 """
 
-    prompt = f"""You are an expert academic CV writer. Create a COMPREHENSIVE and DETAILED professional CV from the provided data sources.
+    prompt = f"""You are an expert academic CV writer with STRICT ANTI-HALLUCINATION protocols.
 
 {compact_context}
 
-**YOUR MISSION**: Extract and present EVERY piece of information available. This CV should be thorough and professional.
+**CRITICAL RULES - VIOLATION WILL FAIL THE TASK:**
+
+1. **ZERO HALLUCINATION POLICY**:
+   - ONLY write information that EXISTS in the data sources above
+   - DO NOT invent, guess, or create ANY information
+   - If education shows "University of Leeds", DO NOT write "University of Wollongong"
+   - If source says "M.Sc., Univ. of Leeds, 1997", COPY IT EXACTLY
+   - When uncertain, write "Not available in sources"
+
+2. **EDUCATION VERIFICATION**:
+   - Look for education in DATABASE INFORMATION section FIRST
+   - Check for degree patterns: "Ph.D.", "M.Sc.", "S.T.", "Ir.", "Bachelor", "Master", "Doctoral"
+   - Check for university names: "University of", "Universitas", "Institut"
+   - COPY education entries EXACTLY as written in source data
+   - DO NOT guess years, universities, or degrees
+   - Example: If data says "M.Sc., University of Leeds, UK, 1997" → write EXACTLY that
+
+3. **PUBLICATIONS EXTRACTION**:
+   - YOUR PRIMARY GOAL: Extract 15-20 publications if available
+   - Scan EVERY line in UI SCHOLAR, DATABASE, and GOOGLE SCHOLAR sections
+   - Look for publication patterns: titles ending with periods, years in parentheses, author lists
+   - Each publication MUST have: title + authors + year
+   - Prioritize UI Scholar publications (most reliable for UI faculty)
+
+**YOUR MISSION**: Extract EVERY piece of verified information. Quality = accuracy, not creativity.
 
 Create a detailed CV using this EXACT structure:
 
@@ -168,15 +192,26 @@ Create a detailed CV using this EXACT structure:
 ## ACADEMIC BACKGROUND
 
 ### Education History
-[List ALL degrees chronologically, newest first. Include as much detail as possible:]
-- **[Degree Title]** (e.g., Ph.D., S3, Doctoral) in [Field], [University Name], [Country], [Year]
-  - Dissertation: [Title if mentioned]
-  - Advisor: [Name if mentioned]
-- **[Degree Title]** (e.g., M.T., S2, Master) in [Field], [University Name], [Country], [Year]
-  - Thesis: [Title if mentioned]
-- **[Degree Title]** (e.g., S.T., S1, Bachelor) in [Field], [University Name], [Country], [Year]
 
-If no education data found: "- Education history not available in sources"
+**EXTRACTION INSTRUCTIONS FOR EDUCATION:**
+1. Search DATABASE INFORMATION section for these keywords: "Ph.D.", "M.Sc.", "M.T.", "S.T.", "Ir.", "Bachelor", "Master", "Doctoral", "University of", "Universitas"
+2. Look for patterns like: "[Degree], [University], [Year]" or "[Degree] in [Field], [University], [Country], [Year]"
+3. COPY each education entry EXACTLY as it appears in the source
+4. DO NOT change university names (Leeds ≠ Wollongong!)
+5. DO NOT invent years or fields of study
+6. If degree is mentioned but details missing, write: "- [Degree Title] (details not available)"
+
+**FORMAT (COPY EXACTLY FROM SOURCES):**
+- **[Exact Degree as written]**, [Exact University as written], [Country if mentioned], [Year if mentioned]
+  - Field: [Only if explicitly stated]
+  - Dissertation/Thesis: [Only if title is given]
+- **[Next degree]**, [University], [Year]
+
+**EXAMPLE OF CORRECT EXTRACTION:**
+If source says: "M.Sc., University of Leeds, UK, 1997"
+Write EXACTLY: "- **M.Sc.**, University of Leeds, UK, 1997"
+
+If NO education found in ANY source: "- Education history not available in sources"
 
 ### Academic Titles & Certifications
 [If any academic titles (Lektor, Lektor Kepala, etc.) or certifications are mentioned, list them here]
@@ -210,68 +245,80 @@ If no research areas found: "- Research interests not available in sources"
 
 ## PUBLICATIONS & SCHOLARLY WORKS
 
-**CRITICAL VALIDATION RULES FOR PUBLICATIONS - READ CAREFULLY:**
+**🚨 CRITICAL MISSION: EXTRACT 15-20 PUBLICATIONS 🚨**
 
-1. **DATA SOURCE PRIORITY** (MOST IMPORTANT):
-   - **PRIMARY SOURCE**: UI SCHOLAR PUBLICATIONS section (scholar.ui.ac.id) - THIS IS THE MOST RELIABLE SOURCE for UI faculty
-   - **SECONDARY SOURCE**: DATABASE INFORMATION section (internal database)
-   - **TERTIARY SOURCE**: GOOGLE SCHOLAR PUBLICATIONS section (external API)
-   - **PRIORITIZE publications from UI Scholar** as they are official UI research repository
+**WHY PUBLICATIONS ARE FEW (DIAGNOSIS):**
+- Problem: LLM is being too cautious and rejecting valid publications
+- Solution: Be more aggressive in extraction while maintaining quality
 
-2. **AUTHOR NAME VERIFICATION:**
-   - Extract ONLY publications where {professor_name}'s surname appears in the author list
-   - Look for the surname from {professor_name} in the "Authors:" or "by:" or "👥" field
-   - Example: If professor is "Riri Fitri Sari", look for "Sari" or "R. F. Sari" or "Riri Fitri Sari" in authors
-   - **If NO author names are listed with the publication, SKIP IT ENTIRELY**
-   - **If the publication only shows a title without authors, SKIP IT**
+**NEW EXTRACTION PROTOCOL:**
 
-3. **REJECT GENERIC/INCOMPLETE PUBLICATIONS:**
-   - ❌ SKIP: "The 18th International Conference on Quality in Research" (no paper title, just conference name)
-   - ❌ SKIP: "Conference: XYZ Conference" (no actual paper title)
-   - ❌ SKIP: Titles less than 30 characters (too generic)
-   - ✅ ACCEPT: "Design and Implementation of Smart Grid Using IoT Technology" with proper authors
+### STEP 1: RAPID SCAN (Find ALL potential publications)
+Scan ALL three data sources line by line. Look for these patterns:
+- Lines with quotation marks containing research titles
+- Lines starting with numbers (1., 2., 3.) often indicate publications
+- Lines containing years (2019, 2020, 2021, etc.) near research terms
+- Lines with "Journal:", "Conference:", "Published in:", "Proceedings"
+- Author lists (often after "by", "Authors:", or "👥")
 
-4. **REQUIRED ELEMENTS FOR EACH PUBLICATION:**
-   - Complete paper title (not just conference/journal name)
-   - Author list that includes {professor_name}
-   - Year or publication date
-   - Journal/Conference venue name
+### STEP 2: VALIDATION (Apply these rules)
+For EACH potential publication found:
 
-### Journal Articles
-[ONLY list journal publications that meet ALL validation rules above:]
-- **[Complete Paper Title - Must be specific research title, NOT just journal name]**
-  - Authors: [Full author list - {professor_name}'s surname MUST appear here]
+✅ **ACCEPT IF:**
+- Has a specific paper title (> 30 characters)
+- Mentions {professor_name}'s surname OR first initial in context
+- Has a year (2000-2024)
+- Has venue (journal/conference name)
+
+❌ **REJECT ONLY IF:**
+- Just conference name without paper title (e.g., "IEEE Conference 2020" alone)
+- Obviously unrelated author (completely different research field + different name)
+- Duplicate of already listed publication
+
+### STEP 3: PRIORITIZE BY SOURCE
+1. **UI SCHOLAR** publications → Extract ALL (most reliable)
+2. **DATABASE** publications → Extract if has title + year
+3. **GOOGLE SCHOLAR** publications → Use as supplementary
+
+### STEP 4: FORMAT OUTPUT
+For EACH valid publication, write:
+
+**Journal Articles:**
+- **[Full Paper Title]**
+  - Authors: [List all authors, highlight {professor_name} if present]
   - Journal: [Journal name]
-  - Year: [Publication year]
-  - Citations: [Number if available]
-  - Source: [UI Scholar / Database / Google Scholar]
-
-### Conference Papers
-[ONLY list conference papers that meet ALL validation rules above:]
-- **[Complete Paper Title - Must be specific research title, NOT just conference name]**
-  - Authors: [Full author list - {professor_name}'s surname MUST appear here]
-  - Conference: [Conference name]
   - Year: [Year]
-  - Citations: [Number if available]
+  - Citations: [If available]
   - Source: [UI Scholar / Database / Google Scholar]
 
-### Books & Book Chapters
-[If any books or book chapters with {professor_name} as author/co-author]
+**Conference Papers:**
+- **[Full Paper Title - NOT just conference name]**
+  - Authors: [List all authors]
+  - Conference: [Full conference name]
+  - Year: [Year]
+  - Source: [UI Scholar / Database / Google Scholar]
 
-**STEP-BY-STEP EXTRACTION PROCESS:**
-1. **PRIORITY 1**: Scan through UI SCHOLAR PUBLICATIONS section FIRST - this is the official UI repository
-2. **PRIORITY 2**: Scan through DATABASE INFORMATION section - look for publication entries with title + authors + year
-3. **PRIORITY 3**: Scan through GOOGLE SCHOLAR PUBLICATIONS section - use as supplementary source
-4. For EACH potential publication found:
-   - Step A: Check if it has a specific paper title (not just venue name)
-   - Step B: Check if it lists authors
-   - Step C: Verify {professor_name}'s surname is in the author list
-   - Step D: Only if ALL checks pass, add it to the list
-5. Target: 10-15 VERIFIED publications with complete information
-6. **Quality over quantity** - Better to list 5 accurate publications than 15 questionable ones
-7. **IMPORTANT**: Prefer UI Scholar publications over other sources when there are duplicates
+**Books & Book Chapters:**
+[If any books with {professor_name} as author]
 
-If no publications found: "- Publications not available in sources"
+**TARGET OUTPUT:**
+- Minimum: 10 publications
+- Target: 15-20 publications
+- Maximum: No limit if all are valid
+
+**EXTRACTION MINDSET:**
+- "When in doubt, INCLUDE it" (unless obviously wrong)
+- Look for research paper titles, not just venue names
+- Accept publications even if author name is partially matched
+- Better to have 15 good publications than 3 perfect ones
+
+**QUALITY CHECK:**
+After extraction, verify:
+- Each entry has: Title + Year + Venue
+- Title is specific (not just "Conference 2020")
+- At least 10 publications listed (if data available)
+
+If truly no publications found after thorough search: "- Publications not available in sources"
 
 ## RESEARCH PROJECTS & GRANTS
 [If any research projects, grants, or funding information is mentioned, list them here with details]
@@ -315,43 +362,44 @@ If metrics not available: "- Metrics data not available in sources"
 
 ---
 
-**CRITICAL QUALITY STANDARDS:**
+**FINAL QUALITY CHECKLIST (VERIFY BEFORE SUBMITTING):**
 
-1. **COMPLETENESS**: Extract EVERY piece of information from the data sources. Don't leave anything out.
+1. ✅ **EDUCATION**:
+   - Copied EXACTLY from source data (no invented universities)
+   - If found "M.Sc., University of Leeds", did NOT write "University of Wollongong"
+   - Each degree has: Degree name + University + Year (if available)
 
-2. **PUBLICATIONS**: This is crucial! Look carefully through the Google Scholar data and extract:
-   - Complete paper titles (not truncated)
-   - All author names
-   - Journal/conference names
-   - Publication years
-   - Citation counts
-   - List at least 10-15 publications if available
+2. ✅ **PUBLICATIONS** (MOST IMPORTANT):
+   - Extracted 15-20 publications (if available in data)
+   - Each has: Complete title + Authors + Year + Venue
+   - Prioritized UI Scholar publications
+   - NO generic conference names without paper titles
+   - Verified {professor_name}'s surname in author lists
 
-3. **DETAIL**: For each section, extract all available details. If a piece of information exists in the source data, include it in the CV.
+3. ✅ **RESEARCH INTERESTS**:
+   - Extracted ALL keywords and topics from all sources
+   - Listed specific areas (e.g., "IoT", "Smart Grid", "Network Security")
 
-4. **RESEARCH INTERESTS**: Extract ALL keywords, topics, and research areas mentioned anywhere in the data. Be thorough.
+4. ✅ **NO HALLUCINATION**:
+   - Every fact is from the data sources
+   - No invented degrees, universities, or publication titles
+   - Used "Not available" when truly not found
 
-5. **EDUCATION**: Look for all degree information including:
-   - Degree types (S1, S2, S3, Bachelor, Master, PhD, etc.)
-   - Universities (both Indonesian and international)
-   - Years of graduation
-   - Thesis/dissertation titles if mentioned
+5. ✅ **FORMATTING**:
+   - Proper markdown with ** bold ** and - bullets
+   - Professional layout with clear sections
+   - Email uses @ symbol (not [at])
 
-6. **NO PLACEHOLDERS**: Only write "Not available" if you truly cannot find ANY data for that specific field after thoroughly searching all sources.
+**ANTI-HALLUCINATION FINAL CHECK:**
+Before submitting, ask yourself:
+- "Can I point to the exact line in the data sources where I found this information?"
+- "Did I copy education EXACTLY as written?"
+- "Did I extract at least 10 publications if the data had them?"
 
-7. **FORMATTING**: Use proper markdown with:
-   - Bold (**text**) for emphasis
-   - Bullet points (-) for lists
-   - Proper headers (##, ###)
-   - Clean, professional layout
+If answer is YES to all → Submit the CV
+If answer is NO → Go back and fix it
 
-8. **DATA EXTRACTION PRIORITY**:
-   - Look for actual content in DATABASE INFORMATION section first
-   - Then check GOOGLE SCHOLAR PUBLICATIONS section
-   - Extract publication titles, authors, years, citations
-   - Don't summarize - include full details
-
-Now generate the COMPLETE, DETAILED, COMPREHENSIVE CV:"""
+Now generate the ACCURATE, COMPREHENSIVE, FACT-CHECKED CV:"""
 
     try:
         response = llm.call([{"role": "user", "content": prompt}])
