@@ -72,8 +72,13 @@ function ChatPageContent() {
 
     try {
       const token = getAuthToken();
+      // Don't convert to Number if notebookId is UUID string
+      const endpoint = notebookId.includes('-')
+        ? `${API_ENDPOINTS.NOTEBOOKS}/${notebookId}`
+        : API_ENDPOINTS.NOTEBOOK(Number(notebookId));
+      
       const response = await fetch(
-        API_ENDPOINTS.NOTEBOOK(Number(notebookId)),
+        endpoint,
         {
           headers: {
             'Authorization': `Bearer ${token}`,
