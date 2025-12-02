@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Loader2, X } from 'lucide-react';
+import { Send, Loader2, X, Search as SearchIcon } from 'lucide-react';
 
 interface Message {
   id: string;
@@ -17,6 +17,8 @@ interface ChatPanelProps {
   notebookId?: string;
   isLoadingPreviousChats?: boolean;
   previousChats?: PreviousChat[];
+  searchQuery?: string;
+  onSearchChange?: (query: string) => void;
 }
 
 interface PreviousChat {
@@ -27,13 +29,15 @@ interface PreviousChat {
   created_at: string;
 }
 
-export default function ChatPanel({ 
-  onSessionUpdate, 
+export default function ChatPanel({
+  onSessionUpdate,
   onMessageUpdate,
   onSendMessage,
-  notebookId, 
-  isLoadingPreviousChats = false, 
-  previousChats = [] 
+  notebookId,
+  isLoadingPreviousChats = false,
+  previousChats = [],
+  searchQuery = '',
+  onSearchChange
 }: ChatPanelProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -42,7 +46,12 @@ export default function ChatPanel({
   const [sourceUrls, setSourceUrls] = useState<string[]>([]);
   const [tempUrl, setTempUrl] = useState('');
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [localSearchQuery, setLocalSearchQuery] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Control search bar visibility from parent
+  const isSearchOpen = searchQuery === 'active';
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -129,8 +138,65 @@ export default function ChatPanel({
     setSourceUrls(prev => prev.filter(url => url !== urlToRemove));
   };
 
+  // Filter messages based on search query
+  const filteredMessages = localSearchQuery.trim()
+    ? messages.filter(msg =>
+        msg.content.toLowerCase().includes(localSearchQuery.toLowerCase())
+      )
+    : messages;
+
+  const highlightText = (text: string, query: string) => {
+    if (!query.trim()) return text;
+    
+    const regex = new RegExp(`(${query})`, 'gi');
+    return text.replace(regex, '<mark class="bg-brand-yellow text-black px-1 rounded">$1</mark>');
+  };
+
+  useEffect(() => {
+    if (isSearchOpen && searchInputRef.current) {
+      searchInputRef.current.focus();
+    }
+  }, [isSearchOpen]);
+
+  useEffect(() => {
+    if (!isSearchOpen) {
+      setLocalSearchQuery('');
+    }
+  }, [isSearchOpen]);
+
   return (
     <main className="flex-1 flex flex-col overflow-hidden bg-brand-dark">
+      {/* Search Bar */}
+      {isSearchOpen && (
+        <div className="bg-brand-container border-b-2 border-brand-border p-4 animate-in fade-in slide-in-from-top duration-300">
+          <div className="max-w-4xl mx-auto flex items-center gap-3">
+            <SearchIcon size={20} className="text-brand-yellow" />
+            <input
+              ref={searchInputRef}
+              type="text"
+              value={localSearchQuery}
+              onChange={(e) => setLocalSearchQuery(e.target.value)}
+              placeholder="Search in conversation..."
+              className="flex-1 bg-brand-dark text-white placeholder-gray-500 rounded-lg p-3 border-2 border-brand-border outline-none focus:border-brand-yellow transition-colors"
+            />
+            <button
+              onClick={() => {
+                setLocalSearchQuery('');
+                if (onSearchChange) onSearchChange('');
+              }}
+              className="text-gray-400 hover:text-white transition-colors p-2"
+            >
+              <X size={20} />
+            </button>
+          </div>
+          {localSearchQuery && (
+            <div className="max-w-4xl mx-auto mt-2 text-sm text-gray-400">
+              Found {filteredMessages.length} message{filteredMessages.length !== 1 ? 's' : ''}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Area Tampilan Chat */}
       <div className="flex-1 p-4 lg:p-6 space-y-4 overflow-y-auto custom-scrollbar">
         {messages.length === 0 ? (
@@ -153,21 +219,40 @@ export default function ChatPanel({
             </div>
           </div>
         ) : (
-          messages.map((m: Message) => (
-            <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom duration-300`}>
-              <div className={`p-3 lg:p-4 rounded-2xl shadow-lg max-w-[85%] lg:max-w-2xl break-words whitespace-pre-wrap ${
-                m.role === 'user' 
-                  ? 'bg-brand-red text-white' 
-                  : 'bg-brand-container text-white border border-brand-border'
-              }`}>
-                {m.role === 'chatbot' ? (
-                  <div className="[&_*]:text-white" dangerouslySetInnerHTML={{ __html: m.content }} />
-                ) : (
-                  m.content
-                )}
+          <>
+            {localSearchQuery && filteredMessages.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-center px-4">
+                <SearchIcon className="w-16 h-16 text-gray-600 mb-4" />
+                <h3 className="text-xl font-semibold text-white mb-2">No messages found</h3>
+                <p className="text-gray-400">Try a different search term</p>
               </div>
-            </div>
-          ))
+            ) : (
+              filteredMessages.map((m: Message) => (
+                <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom duration-300`}>
+                  <div className={`p-3 lg:p-4 rounded-2xl shadow-lg max-w-[85%] lg:max-w-2xl break-words whitespace-pre-wrap ${
+                    m.role === 'user'
+                      ? 'bg-brand-red text-white'
+                      : 'bg-brand-container text-white border border-brand-border'
+                  }`}>
+                    {m.role === 'chatbot' ? (
+                      <div
+                        className="[&_*]:text-white [&_mark]:text-black"
+                        dangerouslySetInnerHTML={{
+                          __html: localSearchQuery ? highlightText(m.content, localSearchQuery) : m.content
+                        }}
+                      />
+                    ) : (
+                      localSearchQuery ? (
+                        <div dangerouslySetInnerHTML={{ __html: highlightText(m.content, localSearchQuery) }} />
+                      ) : (
+                        m.content
+                      )
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+          </>
         )}
         {isLoading && (
            <div className="flex justify-start animate-in fade-in duration-300">

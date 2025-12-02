@@ -1,11 +1,12 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Search, History, User, LogOut } from 'lucide-react';
+import { Search, User, LogOut } from 'lucide-react';
 import Link from 'next/link';
 
 interface HeaderProps {
   notebookTitle?: string;
+  onSearchClick?: () => void;
 }
 
 interface UserData {
@@ -15,7 +16,7 @@ interface UserData {
   role: string;
 }
 
-export default function Header({ notebookTitle }: HeaderProps) {
+export default function Header({ notebookTitle, onSearchClick }: HeaderProps) {
   const [user, setUser] = useState<UserData | null>(null);
 
   useEffect(() => {
@@ -48,18 +49,12 @@ export default function Header({ notebookTitle }: HeaderProps) {
         )}
       </Link>
       <nav className="flex items-center space-x-4 lg:space-x-6">
-        <a
-          href="#"
+        <button
+          onClick={onSearchClick}
           className="text-gray-400 hover:text-brand-yellow transition-all duration-300 flex items-center space-x-1 text-[14px] lg:text-[16px] font-medium"
         >
-          <History size={18} /> <span className="hidden sm:inline">History</span>
-        </a>
-        <a
-          href="#"
-          className="text-gray-400 hover:text-brand-yellow transition-all duration-300 flex items-center space-x-1 text-[14px] lg:text-[16px] font-medium"
-        >
-          <Search size={18} /> <span className="hidden sm:inline">Search</span>
-        </a>
+          <Search size={18} /> <span className="hidden sm:inline">Search Chat</span>
+        </button>
         {user ? (
           <div className="flex items-center space-x-3">
             <div className="hidden sm:block text-right">

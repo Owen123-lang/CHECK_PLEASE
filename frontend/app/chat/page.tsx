@@ -25,6 +25,7 @@ function ChatPageContent() {
   const [previousChats, setPreviousChats] = useState<PreviousChat[]>([]);
   const [isLoadingChats, setIsLoadingChats] = useState(false);
   const [notebookTitle, setNotebookTitle] = useState<string>("");
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
 
   // Fetch previous chats when notebook ID changes
   useEffect(() => {
@@ -164,10 +165,18 @@ function ChatPageContent() {
     console.log('PDF uploaded:', filename);
   };
 
+  const handleSearchClick = () => {
+    setIsSearchOpen(prev => !prev);
+  };
+
+  const handleSearchClose = () => {
+    setIsSearchOpen(false);
+  };
+
   return (
     <ProtectedRoute>
       <div className="flex flex-col h-screen bg-brand-dark text-brand-text">
-        <Header notebookTitle={notebookTitle} />
+        <Header notebookTitle={notebookTitle} onSearchClick={handleSearchClick} />
         <main className="flex flex-1 overflow-hidden">
           {/* Kolom Kiri: Sources & Studio (Sidebar) */}
           <SourcePanel
@@ -186,6 +195,8 @@ function ChatPageContent() {
             notebookId={notebookId || undefined}
             isLoadingPreviousChats={isLoadingChats}
             previousChats={previousChats}
+            searchQuery={isSearchOpen ? 'active' : ''}
+            onSearchChange={handleSearchClose}
           />
         </main>
       </div>
