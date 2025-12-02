@@ -84,6 +84,11 @@ export default function NotebooksPage() {
   };
 
   const handleUpdateNotebook = async (id: string, title: string) => {
+    if (!title.trim()) {
+      alert('Notebook title cannot be empty');
+      return;
+    }
+
     try {
       const token = getAuthToken();
       const response = await fetch(API_ENDPOINTS.NOTEBOOK(Number(id)), {
@@ -92,21 +97,28 @@ export default function NotebooksPage() {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ title }),
+        body: JSON.stringify({ title: title.trim() }),
       });
 
       const data = await response.json();
       if (data.success) {
         setNotebooks(notebooks.map(nb => nb.id === id ? data.payload : nb));
         setEditingNotebook(null);
+        alert('Notebook renamed successfully!');
+      } else {
+        alert('Failed to rename notebook: ' + (data.message || 'Unknown error'));
       }
     } catch (error) {
       console.error('Error updating notebook:', error);
+      alert('Error renaming notebook. Please try again.');
     }
   };
 
   const handleDeleteNotebook = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this notebook?')) return;
+    if (!confirm('Are you sure you want to delete this notebook?')) {
+      setMenuOpenId(null);
+      return;
+    }
 
     try {
       const token = getAuthToken();
@@ -121,11 +133,16 @@ export default function NotebooksPage() {
       const data = await response.json();
       if (data.success) {
         setNotebooks(notebooks.filter(nb => nb.id !== id));
+        alert('Notebook deleted successfully!');
+      } else {
+        alert('Failed to delete notebook: ' + (data.message || 'Unknown error'));
       }
     } catch (error) {
       console.error('Error deleting notebook:', error);
+      alert('Error deleting notebook. Please try again.');
+    } finally {
+      setMenuOpenId(null);
     }
-    setMenuOpenId(null);
   };
 
   const formatDate = (dateString: string) => {
@@ -247,31 +264,44 @@ export default function NotebooksPage() {
                     <FileText className="w-8 h-8 text-[#FFFF00]" />
                     <div className="relative">
                       <button
-                        onClick={() => setMenuOpenId(menuOpenId === notebook.id ? null : notebook.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setMenuOpenId(menuOpenId === notebook.id ? null : notebook.id);
+                        }}
                         className="p-1 text-gray-400 hover:text-white transition-colors"
                       >
                         <MoreVertical className="w-5 h-5" />
                       </button>
                       {menuOpenId === notebook.id && (
-                        <div className="absolute right-0 mt-2 w-48 bg-[#1A1E21] border border-[#2A3339] rounded-lg shadow-xl z-10">
-                          <button
-                            onClick={() => {
-                              setEditingNotebook(notebook);
-                              setMenuOpenId(null);
-                            }}
-                            className="w-full flex items-center gap-2 px-4 py-2 text-sm text-white hover:bg-[#232B2F] transition-colors"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                            Rename
-                          </button>
-                          <button
-                            onClick={() => handleDeleteNotebook(notebook.id)}
-                            className="w-full flex items-center gap-2 px-4 py-2 text-sm text-[#FF0000] hover:bg-[#232B2F] transition-colors"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                            Delete
-                          </button>
-                        </div>
+                        <>
+                          <div
+                            className="fixed inset-0 z-10"
+                            onClick={() => setMenuOpenId(null)}
+                          />
+                          <div className="absolute right-0 mt-2 w-48 bg-[#1A1E21] border border-[#2A3339] rounded-lg shadow-xl z-20">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingNotebook(notebook);
+                                setMenuOpenId(null);
+                              }}
+                              className="w-full flex items-center gap-2 px-4 py-3 text-sm text-white hover:bg-[#232B2F] transition-colors rounded-t-lg"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                              Rename
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteNotebook(notebook.id);
+                              }}
+                              className="w-full flex items-center gap-2 px-4 py-3 text-sm text-[#FF0000] hover:bg-[#232B2F] transition-colors rounded-b-lg"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                              Delete
+                            </button>
+                          </div>
+                        </>
                       )}
                     </div>
                   </div>
