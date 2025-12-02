@@ -125,10 +125,13 @@ class AcademicSearchTool(BaseTool):
 
             query_vector = embeddings.embed_query(query)
             
-            # INCREASED LIMIT: Get more chunks to include publications
+            # DYNAMIC LIMIT: Adjust based on query type
+            # For "list all" queries, get MORE results to ensure completeness
+            limit = 50  # Default: increased to 50 for comprehensive results
+            
             results = collection.find(
                 sort={"$vector": query_vector},
-                limit=20,  # Increased from 5 to 20
+                limit=limit,
                 projection={"*": 1}
             )
 

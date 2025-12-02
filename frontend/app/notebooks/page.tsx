@@ -89,6 +89,13 @@ export default function NotebooksPage() {
       return;
     }
 
+    // Validate ID before API call
+    if (!id || isNaN(id)) {
+      console.error('Invalid notebook ID:', id);
+      alert('Invalid notebook ID. Please refresh the page.');
+      return;
+    }
+
     try {
       const token = getAuthToken();
       const response = await fetch(API_ENDPOINTS.NOTEBOOK(id), {
@@ -115,6 +122,14 @@ export default function NotebooksPage() {
 
   const handleDeleteNotebook = async (id: number) => {
     if (!confirm('Are you sure you want to delete this notebook?')) {
+      setMenuOpenId(null);
+      return;
+    }
+
+    // Validate ID before API call
+    if (!id || isNaN(id)) {
+      console.error('Invalid notebook ID:', id);
+      alert('Invalid notebook ID. Please refresh the page.');
       setMenuOpenId(null);
       return;
     }
