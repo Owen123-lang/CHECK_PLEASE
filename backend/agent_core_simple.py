@@ -55,9 +55,9 @@ class SimpleRAG:
             print(f"\n[STEP 2] 🎯 Query Type: {query_type}")
             
             if query_type == "SIMPLE_LIST":
-                # TIER 1: Direct answer from RAG
-                print("[TIER 1] 📋 Simple list query - Direct answer from database")
-                result = self._direct_list_answer(user_query, vector_results)
+                # Use TIER 2 for list queries (LLM formatting is more reliable than regex)
+                print("[TIER 2] 📋 Simple list query - Using LLM to format database results")
+                result = self._basic_lookup(user_query, vector_results)
                 
             elif query_type == "BASIC_LOOKUP":
                 # TIER 2: Single tool use
