@@ -1226,6 +1226,121 @@ class PDFSearchTool(BaseTool):
             traceback.print_exc()
             return f"❌ Error searching PDF documents: {str(e)}\n\nPlease try uploading the PDF again or contact support."
 
+# ========== URL SEARCH TOOL (USER UPLOADED) ==========
+class URLSearchInput(BaseModel):
+    """Input schema for URL Search Tool."""
+    query: str = Field(..., description="Search query to find information within uploaded website URLs")
+    session_id: str = Field(default=None, description="Optional session ID to filter URLs by user session")
+
+
+class URLSearchTool(BaseTool):
+    name: str = "User URL Search Tool"
+    description: str = (
+        "Searches through user-uploaded website URLs for relevant information. "
+        "This tool ONLY works if the user has uploaded website URLs. "
+        "Use this when user asks questions about their uploaded websites/URLs. "
+        "Returns relevant text excerpts from the uploaded websites that match the query. "
+        "IMPORTANT: If no results found, tell user to upload URL first."
+    )
+    args_schema: Type[BaseModel] = URLSearchInput
+
+    def _run(self, query: str, session_id: str = None) -> str:
+        """Search through uploaded URL content stored in database with optional session filtering."""
+        # Import session context from agent_core
+        from agent_core import get_session_context
+        
+        # If session_id not provided, try to get it from global context
+        if not session_id:
+            session_id = get_session_context()
+            if session_id:
+                print(f"[URL_SEARCH] Using session_id from global context: {session_id}")
+        
+        if embeddings is None:
+            return "Error: Embedding model failed to initialize."
+            
+        try:
+            client = DataAPIClient(ASTRA_DB_APPLICATION_TOKEN)
+            db = client.get_database_by_api_endpoint(ASTRA_DB_API_ENDPOINT)
+            collection = db.get_collection(COLLECTION_NAME)
+
+            query_vector = embeddings.embed_query(query)
+            
+            # Build filter - try with session_id first, then fall back to all user URLs
+            filter_query = {"source_type": "user_url"}
+            if session_id:
+                filter_query["session_id"] = session_id
+                print(f"[URL_SEARCH] Filtering by session_id: {session_id}")
+            else:
+                print("[URL_SEARCH] No session_id provided, searching all user URLs")
+            
+            # Search for URL content
+            results = collection.find(
+                filter=filter_query,
+                sort={"$vector": query_vector},
+                limit=15,  # Get top 15 relevant chunks
+                projection={"*": 1}
+            )
+
+            docs = list(results)
+            
+            print(f"[URL_SEARCH] Query: {query}")
+            print(f"[URL_SEARCH] Session filter: {session_id or 'None (all URLs)'}")
+            print(f"[URL_SEARCH] Found {len(docs)} URL chunks")
+            
+            if not docs:
+                if session_id:
+                    # Try again without session filter (fallback)
+                    print("[URL_SEARCH] No results with session_id, trying without filter...")
+                    results_fallback = collection.find(
+                        filter={"source_type": "user_url"},
+                        sort={"$vector": query_vector},
+                        limit=15,
+                        projection={"*": 1}
+                    )
+                    docs = list(results_fallback)
+                    
+                    if not docs:
+                        return "⚠️ **No website URLs found.**\n\nPlease upload a website URL first. You can:\n1. Click 'Add New Source' button\n2. Enter the website URL\n3. Then ask questions about it!"
+                    else:
+                        print(f"[URL_SEARCH] Fallback found {len(docs)} chunks from other sessions")
+                else:
+                    return "⚠️ **No website URLs found.**\n\nPlease upload a website URL first using the 'Add New Source' button."
+            
+            context_parts = []
+            url_sources = set()
+            
+            for idx, doc in enumerate(docs):
+                content = (
+                    doc.get('text') or
+                    doc.get('content') or
+                    doc.get('page_content') or
+                    str(doc)
+                )
+                
+                if content:
+                    url_source = doc.get('url', 'Unknown URL')
+                    chunk_index = doc.get('chunk_index', '?')
+                    url_sources.add(url_source)
+                    
+                    context_parts.append(f"[From: {url_source}, Section {chunk_index}]\n{content}")
+                    print(f"[URL_SEARCH]   [{idx+1}] {len(content)} chars from {url_source[:60]}... (chunk {chunk_index})")
+            
+            context = "\n\n---\n\n".join(context_parts)
+            
+            result = f"🌐 **Information from {len(url_sources)} uploaded website(s):**\n\n"
+            result += f"**Sources:** {', '.join([url[:50] + '...' if len(url) > 50 else url for url in url_sources])}\n\n"
+            result += f"**Relevant Content from the Website:**\n\n{context}"
+            
+            print(f"[URL_SEARCH] ✅ Total context: {len(context)} characters from {len(url_sources)} URLs")
+            return result
+            
+        except Exception as e:
+            print(f"[URL_SEARCH ERROR] {e}")
+            import traceback
+            traceback.print_exc()
+            return f"❌ Error searching uploaded URLs: {str(e)}\n\nPlease try uploading the URL again or contact support."
+
+
 
 # Initialize tool instances
 web_search_tool = TavilySearchTool()
@@ -1240,4 +1355,5 @@ google_scholar_cited_by_tool = GoogleScholarCitedByTool()
 cv_generator_tool = CVGeneratorTool()
 ui_scholar_search_tool = UIScholarSearchTool()
 eng_ui_personnel_scraper_tool = EngUIPersonnelScraperTool()  # NEW: ENG.UI.AC.ID scraper
+url_search_tool = URLSearchTool()  # User URL search tool
 pdf_search_tool = PDFSearchTool()  # New PDF search tool

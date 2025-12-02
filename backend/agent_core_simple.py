@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
 from crewai import Agent, Task, Crew, Process, LLM
-from tools import academic_search_tool, dynamic_web_scraper_tool, google_scholar_tool, cv_generator_tool, ui_scholar_search_tool, pdf_search_tool
+from tools import academic_search_tool, dynamic_web_scraper_tool, google_scholar_tool, cv_generator_tool, ui_scholar_search_tool, pdf_search_tool, url_search_tool
 import re
 
 load_dotenv()
