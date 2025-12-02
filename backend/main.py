@@ -2,7 +2,8 @@ from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from agent_core import run_agentic_rag_crew  # Use intelligent CrewAI agent
+from agent_core import run_agentic_rag_crew  # Full CrewAI agent
+from agent_core_simple import run_simple_rag  # Simplified routing system
 from starlette.responses import StreamingResponse, Response
 from crewai import LLM
 import io
@@ -236,16 +237,15 @@ async def handle_chat_query(request: QueryRequest):
             result = handle_chitchat(request.message)
             print(f"[API] Chitchat response generated")
         else:
-            print("[API] Detected: ACADEMIC QUERY - Using Intelligent CrewAI Agent")
-            print("[API] Agent will autonomously:")
-            print("[API]   1. Check database (MANDATORY)")
-            print("[API]   2. Decide which tools to use (SINTA/Scholar/WebScraper)")
-            print("[API]   3. Cross-validate data from multiple sources")
-            print("[API]   4. Synthesize comprehensive answer")
-            print("[API]   5. Use conversation context to resolve pronouns (his/her/their)")
+            print("[API] Detected: ACADEMIC QUERY - Using Smart Routing System")
+            print("[API] System will:")
+            print("[API]   • TIER 1: Direct answer for simple lists (no tools)")
+            print("[API]   • TIER 2: Single tool for basic lookups")
+            print("[API]   • TIER 3: Full CrewAI for complex queries")
             print(f"{'='*60}\n")
             
-            result = run_agentic_rag_crew(request.message, request.user_urls, conversation_history)
+            # Use simplified routing system for better efficiency
+            result = run_simple_rag(request.message, request.user_urls, conversation_history)
             
             print(f"\n{'='*60}")
             print(f"[API] Agent completed! Response length: {len(str(result))} chars")

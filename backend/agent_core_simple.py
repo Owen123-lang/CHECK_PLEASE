@@ -1,23 +1,28 @@
 import os
 from dotenv import load_dotenv
-from crewai import LLM
-from tools import (
-    academic_search_tool, 
-    dynamic_web_scraper_tool, 
-    google_scholar_tool,
-    google_scholar_profiles_tool,
-    google_scholar_author_tool,
-    google_scholar_publications_tool,
-    google_scholar_cited_by_tool,
-    sinta_scraper_tool,
-    web_search_tool
-)
+from crewai import Agent, Task, Crew, Process, LLM
+from tools import academic_search_tool, dynamic_web_scraper_tool, google_scholar_tool, sinta_scraper_tool, cv_generator_tool, ui_scholar_search_tool, pdf_search_tool
 import re
 
 load_dotenv()
 
 class SimpleRAG:
-    """Simplified RAG system with guaranteed database check and fallback."""
+    """
+    SIMPLIFIED RAG System with 3-tier routing:
+    
+    TIER 1: DIRECT ANSWER (no tools)
+    - Simple lists (lecturers, faculty, professors)
+    - Basic facts already in database
+    
+    TIER 2: SINGLE TOOL USE (minimal CrewAI)
+    - Specific person lookup
+    - Single source verification
+    
+    TIER 3: MULTI-AGENT (full CrewAI)
+    - Complex research queries
+    - Cross-validation needed
+    - Publications analysis
+    """
     
     def __init__(self):
         api_key = os.getenv("GEMINI_API_KEY")
@@ -27,288 +32,225 @@ class SimpleRAG:
         self.llm = LLM(
             model="gemini/gemini-2.0-flash",
             api_key=api_key,
-            temperature=0.3,
-            max_tokens=4000,
+            temperature=0.1,  # Lower for more deterministic output
+            max_tokens=1500,
         )
     
-    def query(self, user_query: str, user_urls: list[str] = None, conversation_history: list[dict] = None) -> str:
+    def query(self, user_query: str, user_urls: list = None, conversation_history: list = None) -> str:
         """
-        Main RAG query method with GUARANTEED steps:
-        1. ALWAYS check database first
-        2. If insufficient, scrape UI website
-        3. Format with LLM
-        
-        Args:
-            user_query: The current user query
-            user_urls: Optional list of URLs to scrape
-            conversation_history: List of previous messages [{"user": "...", "assistant": "..."}]
+        Smart routing based on query complexity.
         """
-        print("\n" + "="*60)
-        print(f"[SIMPLE RAG] Processing query: {user_query}")
-        if conversation_history:
-            print(f"[SIMPLE RAG] Using conversation history: {len(conversation_history)} messages")
-        print("="*60)
-        
-        all_context = []
-        
-        # Add conversation context to help resolve pronouns
-        context_summary = ""
-        if conversation_history and len(conversation_history) > 0:
-            context_summary = self._build_context_summary(conversation_history)
-            print(f"[CONTEXT] Previous conversation about: {context_summary}")
-        
-        # ============================================
-        # STEP 1: ALWAYS CHECK DATABASE FIRST
-        # ============================================
-        print("\n[STEP 1/4] Checking database...")
         try:
-            # Enhance query with context if needed
-            enhanced_query = self._enhance_query_with_context(user_query, context_summary)
-            print(f"  → Enhanced query: {enhanced_query}")
+            print("\n" + "=" * 70)
+            print("🚀 SIMPLIFIED RAG QUERY PROCESSING")
+            print("=" * 70)
+            print(f"📝 Query: {user_query}")
             
-            db_result = academic_search_tool._run(enhanced_query)
+            # STEP 1: Vector Search (always do this first)
+            print("\n[STEP 1] 🔎 Vector Search...")
+            vector_results = self._vector_search(user_query)
             
-            # Validate database result
-            if self._is_valid_data(db_result):
-                print("  ✓ Database has valid data!")
-                all_context.append(f"Database Info:\n{db_result[:2000]}")
+            # STEP 2: Detect query type and route
+            query_type = self._detect_query_type(user_query)
+            print(f"\n[STEP 2] 🎯 Query Type: {query_type}")
+            
+            if query_type == "SIMPLE_LIST":
+                # TIER 1: Direct answer from RAG
+                print("[TIER 1] 📋 Simple list query - Direct answer from database")
+                result = self._direct_list_answer(user_query, vector_results)
+                
+            elif query_type == "BASIC_LOOKUP":
+                # TIER 2: Single tool use
+                print("[TIER 2] 🔍 Basic lookup - Minimal tool use")
+                result = self._basic_lookup(user_query, vector_results)
+                
             else:
-                print("  ✗ Database returned invalid/corrupt data")
-        except Exception as e:
-            print(f"  ✗ Database error: {e}")
-        
-        # ============================================
-        # STEP 2: SCRAPE UI WEBSITE (GUARANTEED DATA)
-        # ============================================
-        print("\n[STEP 2/4] Scraping UI official website...")
-        try:
-            ui_url = "https://ee.ui.ac.id/staff-pengajar/"
-            print(f"  → Scraping: {ui_url}")
-            web_result = dynamic_web_scraper_tool._run(ui_url)
+                # TIER 3: Full multi-agent
+                print("[TIER 3] 🤖 Complex query - Full CrewAI agents")
+                result = self._complex_query(user_query, vector_results, conversation_history)
             
-            if self._is_valid_data(web_result):
-                print("  ✓ Website scraping successful!")
-                all_context.append(f"UI Website Data:\n{web_result[:2000]}")
-            else:
-                print("  ✗ Website returned invalid data")
+            # Post-processing
+            print("\n[POST-PROCESSING] 🧹 Cleaning output...")
+            result = self._filter_personal_info(result)
+            result = self._deduplicate_gentle(result)
+            
+            print("\n" + "=" * 70)
+            print("✅ QUERY PROCESSING COMPLETE")
+            print("=" * 70)
+            
+            return result
+            
         except Exception as e:
-            print(f"  ✗ Website scraping error: {e}")
-        
-        # ============================================
-        # STEP 3: USER-PROVIDED URLS (if any)
-        # ============================================
-        if user_urls and len(user_urls) > 0:
-            print(f"\n[STEP 3/4] Scraping user-provided URLs: {len(user_urls)}")
-            for url in user_urls[:3]:  # Limit to 3 URLs
-                try:
-                    print(f"  → Scraping: {url}")
-                    url_result = dynamic_web_scraper_tool._run(url)
-                    if self._is_valid_data(url_result):
-                        all_context.append(f"User URL ({url}):\n{url_result[:1000]}")
-                        print("    ✓ Success")
-                except Exception as e:
-                    print(f"    ✗ Error: {e}")
-        
-        # ============================================
-        # STEP 4: LLM SYNTHESIS
-        # ============================================
-        print("\n[STEP 4/4] Synthesizing answer with LLM...")
-        
-        if not all_context:
-            print("  ✗ NO DATA COLLECTED! Using emergency response.")
-            return self._emergency_response(user_query)
-        
-        # Combine all context
-        combined_context = "\n\n---\n\n".join(all_context)
-        print(f"  → Total context: {len(combined_context)} characters")
-        
-        # Determine query intent
-        intent = self._detect_intent(user_query)
-        print(f"  → Query intent: {intent}")
-        
-        # Generate response
-        try:
-            response = self._generate_response(user_query, combined_context, intent, conversation_history)
-            print("  ✓ Response generated successfully!")
-            return response
-        except Exception as e:
-            print(f"  ✗ LLM error: {e}")
-            return self._emergency_response(user_query)
+            print(f"\n❌ ERROR: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return self._emergency_fallback(user_query)
     
-    def _build_context_summary(self, conversation_history: list[dict]) -> str:
-        """Extract key entities (names) from conversation history."""
-        context = ""
-        
-        # Get the last few messages
-        recent_messages = conversation_history[-3:] if len(conversation_history) > 3 else conversation_history
-        
-        for msg in recent_messages:
-            user_msg = msg.get("user", "")
-            assistant_msg = msg.get("assistant", "")
-            
-            # Extract names (capitalize words, likely names)
-            import re
-            names = re.findall(r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*', user_msg + " " + assistant_msg)
-            
-            # Filter academic titles
-            academic_names = [n for n in names if not n in ["Database", "Website", "Info", "Research"]]
-            
-            if academic_names:
-                context = ", ".join(set(academic_names))
-        
-        return context
-    
-    def _enhance_query_with_context(self, query: str, context_summary: str) -> str:
+    def _detect_query_type(self, query: str) -> str:
         """
-        Enhance query with context to resolve pronouns.
-        Example: "what are his research?" + context "Alfan Praseka" -> "Alfan Praseka research"
+        Classify query into 3 tiers:
+        - SIMPLE_LIST: Just list names/items from database
+        - BASIC_LOOKUP: Single person/topic lookup
+        - COMPLEX: Multi-step research needed
         """
         query_lower = query.lower()
         
-        # Check if query contains pronouns
-        pronouns = ["his", "her", "their", "he", "she", "they", "him"]
-        has_pronoun = any(pronoun in query_lower.split() for pronoun in pronouns)
-        
-        if has_pronoun and context_summary:
-            # Replace pronoun with context
-            print(f"  → Detected pronoun in query, adding context: {context_summary}")
-            return f"{context_summary} {query}"
-        
-        return query
-    
-    def _is_valid_data(self, data: str) -> bool:
-        """Check if data is valid (not error pages or garbage)."""
-        if not data or len(data) < 100:
-            return False
-        
-        # Check for error indicators
-        error_indicators = [
-            '<!DOCTYPE html>',
-            '<div class="error-container">',
-            '404',
-            'An error occurred while processing'
+        # TIER 1: Simple list queries
+        simple_list_patterns = [
+            r'\blist\s+(all|of)?\s*(the)?\s*lecturers?',
+            r'\blist\s+(all|of)?\s*(the)?\s*professors?',
+            r'\blist\s+(all|of)?\s*(the)?\s*faculty',
+            r'\blist\s+(all|of)?\s*(the)?\s*staff',
+            r'\blist\s+(all|of)?\s*(the)?\s*dosen',
+            r'\bgive\s+me\s+.*\blist\b.*\blecturers?',
+            r'\bshow\s+me\s+.*\blecturers?',
+            r'\bsiapa\s+saja\s+dosen',
+            r'\bdaftar\s+dosen',
         ]
         
-        error_count = sum(1 for indicator in error_indicators if indicator in data)
-        if error_count > 2:
-            return False
+        for pattern in simple_list_patterns:
+            if re.search(pattern, query_lower):
+                return "SIMPLE_LIST"
         
-        # Check for academic content
-        valid_indicators = ['prof', 'dr.', 'dosen', 'lecture', 'departemen']
-        valid_count = sum(1 for indicator in valid_indicators if indicator.lower() in data.lower())
+        # TIER 2: Basic lookup (specific person or simple fact)
+        basic_lookup_patterns = [
+            r'\bwho\s+is\b',
+            r'\bsiapa\s+(itu)?\b',
+            r'\btell\s+me\s+about\b',
+            r'\binformation\s+about\b',
+            r'\bprofile\s+of\b',
+        ]
         
-        return valid_count >= 2
+        # Check if query is asking about specific person (capitalized name)
+        has_person_name = bool(re.search(r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b', query))
+        
+        for pattern in basic_lookup_patterns:
+            if re.search(pattern, query_lower) or has_person_name:
+                return "BASIC_LOOKUP"
+        
+        # TIER 3: Everything else (complex)
+        return "COMPLEX"
     
-    def _detect_intent(self, query: str) -> str:
-        """Detect what user wants."""
-        query_lower = query.lower()
+    def _direct_list_answer(self, query: str, vector_results: str) -> str:
+        """
+        TIER 1: Direct answer for simple list queries.
+        NO TOOLS. Just extract and format from RAG results.
+        """
+        print("[TIER 1] Extracting names from database...")
         
-        if any(kw in query_lower for kw in ['list', 'daftar', 'siapa saja', 'semua']):
-            return 'list'
-        elif any(kw in query_lower for kw in ['profil lengkap', 'detail', 'comprehensive']):
-            return 'full_profile'
-        elif any(kw in query_lower for kw in ['penelitian', 'publikasi', 'research']):
-            return 'research'
-        else:
-            return 'general'
+        # Extract lecturer names from vector results
+        names = set()
+        
+        # Pattern to match academic names with titles
+        name_patterns = [
+            r'((?:Prof\.?\s*)?(?:Dr\.?\s*)?(?:Ir\.?\s*)?[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+(?:\s*,\s*(?:S\.T\.|M\.Sc|M\.Eng|Ph\.D|MT\.|IPU\.?))*)',
+        ]
+        
+        for pattern in name_patterns:
+            matches = re.findall(pattern, vector_results)
+            for match in matches:
+                name = match.strip()
+                # Validate it's a real name (not common words)
+                if len(name) > 8 and 'Copyright' not in name and 'Contact' not in name:
+                    names.add(name)
+        
+        if not names:
+            return "⚠️ No lecturers found in database. Please try a different query."
+        
+        # Sort names alphabetically
+        sorted_names = sorted(names)
+        
+        # Format output
+        output = f"📚 **List of Lecturers ({len(sorted_names)} found)**\n\n"
+        
+        # Group by title
+        professors = [n for n in sorted_names if 'Prof.' in n]
+        doctors = [n for n in sorted_names if 'Dr.' in n and 'Prof.' not in n]
+        others = [n for n in sorted_names if 'Dr.' not in n and 'Prof.' not in n]
+        
+        if professors:
+            output += "## 🎓 Professors\n"
+            for name in professors[:20]:  # Limit to 20
+                output += f"• {name}\n"
+            output += "\n"
+        
+        if doctors:
+            output += "## 👨‍🏫 Doctors/Senior Lecturers\n"
+            for name in doctors[:20]:
+                output += f"• {name}\n"
+            output += "\n"
+        
+        if others:
+            output += "## 👨‍🎓 Lecturers\n"
+            for name in others[:20]:
+                output += f"• {name}\n"
+            output += "\n"
+        
+        output += f"\n📊 **Total:** {len(sorted_names)} lecturers\n"
+        output += f"💡 **Source:** Academic Database (Astra DB)\n"
+        
+        print(f"[TIER 1] ✓ Formatted {len(sorted_names)} unique names")
+        return output
     
-    def _generate_response(self, query: str, context: str, intent: str, conversation_history: list[dict] = None) -> str:
-        """Generate natural response using LLM with conversation awareness."""
+    def _basic_lookup(self, query: str, vector_results: str) -> str:
+        """
+        TIER 2: Basic lookup with minimal tool use.
+        Use LLM to format RAG results nicely.
+        """
+        print("[TIER 2] Using LLM to format database results...")
         
-        # Build conversation context string
-        conversation_context = ""
-        if conversation_history:
-            conversation_context = "\n\nPrevious Conversation:\n"
-            for msg in conversation_history[-3:]:  # Last 3 messages
-                conversation_context += f"User: {msg.get('user', '')}\n"
-                conversation_context += f"Assistant: {msg.get('assistant', '')[:200]}...\n\n"
-        
-        if intent == 'list':
-            instruction = """Extract and list all professors and lecturers mentioned.
-Format:
-# Daftar Dosen Departemen Teknik Elektro UI
+        prompt = f"""You are an academic assistant. Answer this query based ONLY on the provided database information.
 
-**Profesor:**
-- Prof. Dr. [Name]
-- Prof. Dr. [Name]
+Query: {query}
 
-**Lektor Kepala/Dosen:**
-- Dr. [Name]
-- Dr. [Name]
-
-ONLY list names and titles. NO links, NO extra details."""
-        
-        elif intent == 'full_profile':
-            instruction = """Extract complete ACADEMIC and PROFESSIONAL profile ONLY.
-
-**INCLUDE:**
-- Academic degrees (S1, S2, S3, PhD)
-- Professional positions (Professor, Lecturer, Chairperson)
-- Research areas and interests
-- Publications and citations
-- SINTA score, Scopus ID, Google Scholar
-- Academic awards and recognitions
-- Professional affiliations
-
-**NEVER INCLUDE:**
-- Birth date, age, personal life
-- Family members, spouse, children
-- Hobbies or personal interests
-
-Format professionally in markdown. Skip any personal information completely."""
-        
-        elif intent == 'research':
-            instruction = """Focus on research activities, publications, and citations.
-Present in structured format with key achievements.
-ONLY academic and professional information."""
-        
-        else:
-            instruction = """Provide a clear, concise answer to the query.
-Format professionally and naturally.
-ONLY include academic and professional information.
-NEVER include personal life details (family, birth date, etc.)."""
-        
-        prompt = f"""You are an academic information assistant with conversation memory.
-
-{conversation_context}
-
-User Query: "{query}"
-
-Context Data:
-{context[:3500]}
+Database Information:
+{vector_results[:3000]}
 
 Instructions:
-{instruction}
-
-IMPORTANT:
-- If the user uses pronouns like "his", "her", "their", refer to the person mentioned in the previous conversation
-- Extract ONLY factual ACADEMIC and PROFESSIONAL information from the context
-- NEVER include personal information: birth date, family, spouse, children, personal life
-- Ignore navigation menus, error messages, and irrelevant text
-- If asking for a list, ONLY provide names and titles
-- If asking for details, include all relevant ACADEMIC information
-- Be natural and conversational
-- Use proper markdown formatting
-- MAINTAIN CONTEXT: If the previous query was about a specific person and the current query uses "his/her", refer to that same person
+1. Answer concisely (max 300 words)
+2. Use ONLY information from the database above
+3. Format nicely with markdown
+4. Include: name, position, research areas (if available)
+5. DO NOT make up information
+6. DO NOT include personal details (birth date, family, etc.)
 
 Answer:"""
         
-        response = self.llm.call([{"role": "user", "content": prompt}])
+        try:
+            response = self.llm.call([{"role": "user", "content": prompt}])
+            return str(response)
+        except Exception as e:
+            print(f"[TIER 2] LLM error: {e}")
+            # Fallback to raw results
+            return f"Based on database:\n\n{vector_results[:1000]}"
+    
+    def _complex_query(self, query: str, vector_results: str, conversation_history: list = None) -> str:
+        """
+        TIER 3: Complex query with full CrewAI multi-agent system.
+        """
+        print("[TIER 3] Launching full CrewAI system...")
         
-        # Filter out personal information
-        filtered_response = self._filter_personal_info(str(response))
-        
-        return filtered_response
+        # Use existing complex agent logic
+        from agent_core import HybridRAG
+        hybrid_rag = HybridRAG()
+        return hybrid_rag.query(query, user_urls=None, conversation_history=conversation_history)
+    
+    def _vector_search(self, query: str) -> str:
+        """Search the Astra DB vector database."""
+        try:
+            result = academic_search_tool._run(query)
+            print(f"  ✓ Vector search returned {len(result)} characters")
+            return result
+        except Exception as e:
+            print(f"  ✗ Vector search failed: {e}")
+            return ""
     
     def _filter_personal_info(self, text: str) -> str:
-        """Remove any personal information from the response."""
-        # Keywords to detect personal info lines
+        """Remove personal information."""
         personal_keywords = [
-            'born on', 'lahir', 'birth', 'tanggal lahir',
-            'married', 'menikah', 'istri', 'suami', 'wife', 'husband', 'spouse',
-            'children', 'anak', 'son', 'daughter', 'putra', 'putri',
-            'family', 'keluarga', 'personal life', 'kehidupan pribadi',
-            'hobbies', 'hobby', 'hobi', 'born in', 'age'
+            ('born on', 'tanggal lahir'),
+            ('married to', 'menikah dengan'),
+            ('has children', 'memiliki anak'),
         ]
         
         lines = text.split('\n')
@@ -316,59 +258,56 @@ Answer:"""
         
         for line in lines:
             line_lower = line.lower()
+            is_personal = any(
+                any(kw in line_lower for kw in keyword_pair)
+                for keyword_pair in personal_keywords
+            )
             
-            # Check if line contains personal info
-            has_personal = any(keyword in line_lower for keyword in personal_keywords)
-            
-            if not has_personal:
+            if not is_personal:
                 filtered_lines.append(line)
         
         return '\n'.join(filtered_lines)
     
-    def _emergency_response(self, query: str) -> str:
-        """Emergency response when everything fails."""
-        return f"""# Informasi Dosen Teknik Elektro UI
+    def _deduplicate_gentle(self, text: str) -> str:
+        """Remove exact duplicate lines."""
+        lines = text.split('\n')
+        seen_lines = set()
+        deduplicated_lines = []
+        
+        for line in lines:
+            clean_line = line.strip()
+            
+            if not clean_line.startswith('•') and not clean_line.startswith('-'):
+                deduplicated_lines.append(line)
+                continue
+            
+            if clean_line not in seen_lines:
+                seen_lines.add(clean_line)
+                deduplicated_lines.append(line)
+        
+        return '\n'.join(deduplicated_lines)
+    
+    def _emergency_fallback(self, query: str) -> str:
+        """Emergency fallback response."""
+        return f"""⚠️ I encountered an error processing your request: "{query}"
 
-Mohon maaf, saya mengalami kesulitan teknis saat mengakses data.
+Please try:
+1. Rephrasing your question
+2. Being more specific
+3. Asking about a particular person or topic"""
 
-**Silakan kunjungi langsung:**
-- Website Resmi: https://ee.ui.ac.id/staff-pengajar/
-- SINTA UI: https://sinta.kemdikbud.go.id/affiliations/detail?id=147
+# Singleton instance
+_simple_rag = None
 
-**Atau coba pertanyaan lain:**
-- "siapa Prof. Riri Fitri Sari?"
-- "daftar profesor di Teknik Elektro UI"
+def get_simple_rag():
+    global _simple_rag
+    if _simple_rag is None:
+        _simple_rag = SimpleRAG()
+    return _simple_rag
 
-Saya akan mencoba lagi dalam beberapa saat."""
-
-# Initialize global instance
-_rag_instance = None
-
-def get_rag_instance():
-    """Get or create RAG instance (singleton pattern)."""
-    global _rag_instance
-    if _rag_instance is None:
-        _rag_instance = SimpleRAG()
-    return _rag_instance
-
-def run_agentic_rag_crew(query: str, user_urls: list[str] | None = None):
+def run_simple_rag(user_query: str, user_urls: list = None, conversation_history: list = None) -> str:
     """
-    Main entry point for RAG queries.
-    This replaces the complex CrewAI agent with simple, reliable RAG.
+    Main entry point for simplified RAG system.
     """
-    try:
-        rag = get_rag_instance()
-        return rag.query(query, user_urls)
-    except Exception as e:
-        print(f"[CRITICAL ERROR] RAG system failed: {e}")
-        import traceback
-        traceback.print_exc()
-        return f"""# System Error
-
-Terjadi kesalahan sistem: {str(e)}
-
-**Informasi manual:**
-- Website: https://ee.ui.ac.id/staff-pengajar/
-- SINTA: https://sinta.kemdikbud.go.id
-
-Silakan coba lagi atau kunjungi link di atas."""
+    simple_rag = SimpleRAG()
+    return simple_rag.query(user_query, user_urls, conversation_history)
