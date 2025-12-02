@@ -622,51 +622,33 @@ Please try again with a more specific question!"""
             
             # Build task description based on query type
             if is_pdf_query:
-                task_description = f"""{context_prefix}Answer: "{query}"
+                task_description = f"""USER QUERY: "{query}"
 
-**🔴 SPECIAL INSTRUCTIONS FOR PDF/DOCUMENT QUERIES:**
+**MANDATORY ACTION - YOU MUST DO THIS:**
 
-The user is asking about a PDF document they uploaded. You MUST:
+STEP 1: Use the 'User PDF Search Tool' with this exact search query: "{query}"
+STEP 2: Read the results from the tool
+STEP 3: Summarize the PDF content in Indonesian
 
-1. **USE 'User PDF Search Tool' FIRST** - This is MANDATORY for PDF questions
-2. Search for relevant information within the uploaded PDF
-3. Provide a comprehensive summary or answer based on the PDF content
-4. Include specific details, quotes, or sections from the PDF
-5. If asked to "rangkum" (summarize), provide a structured summary with:
-   - Main topics/themes
-   - Key points from each section
-   - Important findings or conclusions
-   - Specific examples or data mentioned
-
-**FORMATTING FOR PDF SUMMARIES:**
+**OUTPUT FORMAT (use this exactly):**
 
 # Ringkasan Dokumen PDF
 
-## 📄 Topik Utama
-[List main topics found in the PDF]
+## 📄 Informasi Utama
+[Main information from PDF]
 
 ## 🔑 Poin-Poin Penting
-1. **[Topic 1]**: [Summary]
-2. **[Topic 2]**: [Summary]
-3. **[Topic 3]**: [Summary]
+1. [Point 1]
+2. [Point 2]
+3. [Point 3]
 
-## 📊 Detail dan Contoh
-[Include specific examples, data, or quotes from the PDF]
-
-## 💡 Kesimpulan
-[Overall conclusion or key takeaways]
+## 💡 Detail Lengkap
+[Full details from the PDF]
 
 ---
-**Sumber:** Dokumen PDF yang Anda upload
+**Sumber:** PDF yang Anda upload
 
-**CRITICAL RULES:**
-- MUST use 'User PDF Search Tool' - don't try to answer without it
-- Provide detailed information from the PDF
-- Use Indonesian if user asked in Indonesian
-- Quote specific sections when relevant
-- If PDF not found, tell user to upload it first
-
-Generate the response now using the PDF Search Tool:"""
+**CRITICAL:** You CANNOT answer without using the PDF Search Tool first. Execute it NOW."""
             elif is_publication_query:
                 task_description = f"""{context_prefix}Answer: "{query}"
 
