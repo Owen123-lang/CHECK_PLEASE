@@ -628,24 +628,23 @@ Please try again with a more specific question!"""
             # Build task description based on query type
             if is_pdf_query:
                 # CRITICAL: For PDF queries, SKIP vector search context to avoid token limit
-                task_description = f"""USER QUERY: "{query}"
+                task_description = f"""Answer this query in Indonesian: "{query}"
 
-**YOUR TASK:**
-Use the 'User PDF Search Tool' to find content from the uploaded PDF, then summarize it in Indonesian.
+**AVAILABLE TOOLS:**
+- 'User PDF Search Tool' - Use this to find content from uploaded PDFs
 
-**EXECUTION STEPS:**
-1. Call: User PDF Search Tool
-   Input: "{query}"
-2. After getting results, format them nicely in Indonesian
-3. Use headers (##) and bullet points (-)
+**INSTRUCTIONS:**
+1. Call the 'User PDF Search Tool' with query: "{query}"
+2. After tool returns results, format them in Indonesian with:
+   - Use ## for headers
+   - Use bullet points (-)
+   - Keep it readable and organized
+3. If tool returns "No PDF found", say: "Maaf, tidak ada PDF yang ditemukan. Silakan upload PDF terlebih dahulu."
 
-**CRITICAL RULES:**
-- MUST execute the tool (not describe it)
-- Return ACTUAL TEXT (not JSON)
-- Answer in Indonesian language
-- If tool returns empty, say "Maaf, tidak ada PDF yang ditemukan untuk sesi ini"
-
-Execute NOW:"""
+**CRITICAL:**
+- EXECUTE the tool, don't just describe it
+- Return ACTUAL summarized content in Indonesian
+- NO JSON responses - only human-readable text"""
             elif is_publication_query:
                 task_description = f"""{context_prefix}Answer: "{query}"
 
