@@ -20,7 +20,11 @@ function ChatPageContent() {
   const searchParams = useSearchParams();
   const notebookId = searchParams.get("notebook");
   
-  const [sessionId, setSessionId] = useState<string | null>(null);
+  // Generate ONE persistent session ID for this notebook/tab session
+  const [sessionId, setSessionId] = useState<string>(() => {
+    // Generate UUID-like session ID on mount
+    return `session_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+  });
   const [lastAssistantMessage, setLastAssistantMessage] = useState<string | null>(null);
   const [previousChats, setPreviousChats] = useState<PreviousChat[]>([]);
   const [isLoadingChats, setIsLoadingChats] = useState(false);
@@ -120,6 +124,7 @@ function ChatPageContent() {
 
       // Step 2: Send to AI backend (port 8000) for processing
       console.log('Sending to AI backend:', userMessage);
+      console.log('Using session_id:', sessionId);
       const aiResponse = await fetch(API_ENDPOINTS.AI_CHAT, {
         method: 'POST',
         headers: {
@@ -128,6 +133,7 @@ function ChatPageContent() {
         body: JSON.stringify({
           message: userMessage,
           notebookId: notebookId,
+          session_id: sessionId,  // CRITICAL: Pass same session_id used for PDF upload
         }),
       });
 

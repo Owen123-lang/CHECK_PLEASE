@@ -59,15 +59,14 @@ export default function SourcePanel({
       const formData = new FormData();
       formData.append('file', file);
       
-      // CRITICAL: session_id is REQUIRED by backend
-      // If no sessionId prop, generate a temporary one for this upload session
-      const uploadSessionId = sessionId || `upload_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+      // CRITICAL: Use the SAME session_id for PDF upload AND chat queries
+      // This ensures uploaded PDFs are accessible when user asks questions
+      if (!sessionId) {
+        throw new Error('Session ID is required for PDF upload');
+      }
       
-      // DEBUG: Log untuk verifikasi
-      console.log('PDF Upload - sessionId prop:', sessionId);
-      console.log('PDF Upload - generated uploadSessionId:', uploadSessionId);
-      
-      formData.append('session_id', uploadSessionId);
+      console.log('PDF Upload - Using session_id:', sessionId);
+      formData.append('session_id', sessionId);
       
       // DEBUG: Verify FormData contents
       console.log('FormData entries:');
