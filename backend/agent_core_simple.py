@@ -138,21 +138,34 @@ class SimpleRAG:
         """
         print("[TIER 1] Extracting names from database...")
         
-        # Extract lecturer names from vector results
+        # Extract lecturer names - SIMPLIFIED APPROACH
+        # Data format: "Name., Degree. NextName., Degree."
         names = set()
         
-        # Pattern to match academic names with titles
-        name_patterns = [
-            r'((?:Prof\.?\s*)?(?:Dr\.?\s*)?(?:Ir\.?\s*)?[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+(?:\s*,\s*(?:S\.T\.|M\.Sc|M\.Eng|Ph\.D|MT\.|IPU\.?))*)',
-        ]
+        # Clean text
+        text = vector_results.replace('\n---\n', ' ')
+        text = vector_results.replace('\n', ' ')
+        text = re.sub(r'\s+', ' ', text)
         
-        for pattern in name_patterns:
-            matches = re.findall(pattern, vector_results)
-            for match in matches:
-                name = match.strip()
-                # Validate it's a real name (not common words)
-                if len(name) > 8 and 'Copyright' not in name and 'Contact' not in name:
-                    names.add(name)
+        # Simple pattern: Match everything from capital letter to period before next capital
+        # Matches: "Ekadiyanto., S.T., M.Sc." or "Dr. Abdul Muis., ST., M.Eng."
+        pattern = r'([A-Z](?:[a-z]+|r\.|rof\.)\s+(?:[A-Z]\.?\s+)*[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*(?:\s*,\s*[^A-Z\n]+)?\.)'
+        
+        matches = re.findall(pattern, text)
+        
+        print(f"[TIER 1] Found {len(matches)} raw matches")
+        
+        for match in matches:
+            match = match.strip()
+            
+            # Skip if it's a noise word
+            if any(noise in match for noise in ['LECTURER', 'PROFESSOR', 'ASSISTANT', 'ASSOCIATE', 'EMERITUS', 'ADJUNCT']):
+                continue
+            
+            # Validate and add
+            if len(match) > 15 and ',' in match:  # Must have name + degree
+                names.add(match)
+                print(f"[TIER 1]   ✓ {match}")
         
         if not names:
             return "⚠️ No lecturers found in database. Please try a different query."
@@ -169,21 +182,27 @@ class SimpleRAG:
         others = [n for n in sorted_names if 'Dr.' not in n and 'Prof.' not in n]
         
         if professors:
-            output += "## 🎓 Professors\n"
-            for name in professors[:20]:  # Limit to 20
-                output += f"• {name}\n"
+            output += "## 🎓 Professors\n\n"
+            for name in professors[:30]:  # Show up to 30
+                output += f"- {name}\n"
+            if len(professors) > 30:
+                output += f"\n*... and {len(professors) - 30} more professors*\n"
             output += "\n"
         
         if doctors:
-            output += "## 👨‍🏫 Doctors/Senior Lecturers\n"
-            for name in doctors[:20]:
-                output += f"• {name}\n"
+            output += "## 👨‍🏫 Doctors & Senior Lecturers\n\n"
+            for name in doctors[:30]:
+                output += f"- {name}\n"
+            if len(doctors) > 30:
+                output += f"\n*... and {len(doctors) - 30} more doctors*\n"
             output += "\n"
         
         if others:
-            output += "## 👨‍🎓 Lecturers\n"
-            for name in others[:20]:
-                output += f"• {name}\n"
+            output += "## 👨‍🎓 Lecturers & Instructors\n\n"
+            for name in others[:30]:
+                output += f"- {name}\n"
+            if len(others) > 30:
+                output += f"\n*... and {len(others) - 30} more lecturers*\n"
             output += "\n"
         
         output += f"\n📊 **Total:** {len(sorted_names)} lecturers\n"
@@ -267,6 +286,32 @@ Answer:"""
                 filtered_lines.append(line)
         
         return '\n'.join(filtered_lines)
+    
+    def _is_valid_name(self, name: str) -> bool:
+        """Validate if extracted text is a real academic name."""
+        # Must have minimum length
+        if len(name) < 10:
+            return False
+        
+        # Filter out noise words
+        noise_words = ['Copyright', 'Contact', 'Email', 'LECTURER', 'PROFESSOR',
+                      'STAFF', 'Keahlian', 'Phone', 'Office', 'Website', 'EMERITUS',
+                      'ADJUNCT', 'ASSISTANT']
+        if any(word in name for word in noise_words):
+            return False
+        
+        # Must have at least 2 word parts (first + last name)
+        words = name.replace(',', ' ').split()
+        # Filter out title words
+        name_words = [w for w in words if w not in ['Prof.', 'Dr.', 'Ir.', 'dr.', '-Ing.']]
+        if len(name_words) < 2:
+            return False
+        
+        # Must contain uppercase letters (names)
+        if not any(c.isupper() for c in name):
+            return False
+        
+        return True
     
     def _deduplicate_gentle(self, text: str) -> str:
         """Remove exact duplicate lines."""
