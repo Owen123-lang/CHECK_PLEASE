@@ -167,12 +167,26 @@ def parse_markdown_cv(markdown_text: str) -> dict:
             if re.match(r'^\d+\.', line):  # Numbered list
                 pub = re.sub(r'^\d+\.\s*', '', line).strip()
                 pub = re.sub(r'\*\*([^*]+)\*\*', r'\1', pub)  # Remove bold
-                if is_valid_data(pub) and len(pub) > 15:
+                # Filter: must have year OR journal name OR be substantial
+                has_year = bool(re.search(r'\(?\d{4}\)?', pub))
+                has_journal = bool(re.search(r'(?:Journal|Conference|Proceedings|IEEE|ACM)', pub, re.IGNORECASE))
+                is_substantial = len(pub) > 40  # At least 40 chars for a real publication
+                
+                # Skip garbage like "Director Rector" or "Authors: NK Firani"
+                is_garbage = bool(re.search(r'^(Director|Authors:|Journal:|Year:|Link:)', pub, re.IGNORECASE))
+                
+                if is_valid_data(pub) and (has_year or has_journal or is_substantial) and not is_garbage:
                     cv_data['publications'].append(pub)
             elif line.startswith('- '):
                 pub = line[2:].strip()
                 pub = re.sub(r'\*\*([^*]+)\*\*', r'\1', pub)  # Remove bold
-                if is_valid_data(pub) and len(pub) > 15:
+                # Same filtering
+                has_year = bool(re.search(r'\(?\d{4}\)?', pub))
+                has_journal = bool(re.search(r'(?:Journal|Conference|Proceedings|IEEE|ACM)', pub, re.IGNORECASE))
+                is_substantial = len(pub) > 40
+                is_garbage = bool(re.search(r'^(Director|Authors:|Journal:|Year:|Link:)', pub, re.IGNORECASE))
+                
+                if is_valid_data(pub) and (has_year or has_journal or is_substantial) and not is_garbage:
                     cv_data['publications'].append(pub)
         
         elif current_section in ['ACADEMIC METRICS', 'ACADEMIC METRICS & IMPACT']:
