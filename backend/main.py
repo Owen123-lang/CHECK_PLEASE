@@ -56,7 +56,7 @@ app.add_middleware(
 
 # Initialize simple LLM for chitchat (without RAG)
 simple_llm = LLM(
-    model="gemini/gemini-2.0-flash",
+    model="gemini/gemini-1.5-pro",
     api_key=os.getenv("GEMINI_API_KEY"),
     temperature=0.7
 )
