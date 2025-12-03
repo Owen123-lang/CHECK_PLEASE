@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Loader2, X, Search as SearchIcon } from 'lucide-react';
+import { Send, Loader2, X, Search as SearchIcon, Globe, CheckCircle } from 'lucide-react';
+import { API_ENDPOINTS } from '@/lib/api';
 
 interface Message {
   id: string;
@@ -44,7 +45,11 @@ export default function ChatPanel({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sourceUrls, setSourceUrls] = useState<string[]>([]);
+  const [uploadedUrls, setUploadedUrls] = useState<string[]>([]);
   const [tempUrl, setTempUrl] = useState('');
+  const [isUploadingUrl, setIsUploadingUrl] = useState(false);
+  const [urlUploadSuccess, setUrlUploadSuccess] = useState<string | null>(null);
+  const [urlUploadError, setUrlUploadError] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [localSearchQuery, setLocalSearchQuery] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -52,6 +57,19 @@ export default function ChatPanel({
 
   // Control search bar visibility from parent
   const isSearchOpen = searchQuery === 'active';
+
+  // Initialize or retrieve session ID
+  useEffect(() => {
+    let currentSessionId = sessionStorage.getItem('chat_session_id');
+    if (!currentSessionId) {
+      currentSessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      sessionStorage.setItem('chat_session_id', currentSessionId);
+    }
+    setSessionId(currentSessionId);
+    if (onSessionUpdate) {
+      onSessionUpdate(currentSessionId);
+    }
+  }, [onSessionUpdate]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -127,15 +145,70 @@ export default function ChatPanel({
     }
   };
 
-  const handleAddUrl = () => {
-    if (tempUrl.trim()) {
-      setSourceUrls(prev => [...prev, tempUrl.trim()]);
-      setTempUrl('');
+  const handleAddUrl = async () => {
+    if (!tempUrl.trim()) {
+      setUrlUploadError('Please enter a URL');
+      return;
+    }
+
+    // Validate URL format
+    try {
+      new URL(tempUrl);
+    } catch {
+      setUrlUploadError('Invalid URL format');
+      return;
+    }
+
+    if (!sessionId) {
+      setUrlUploadError('Session not initialized');
+      return;
+    }
+
+    setIsUploadingUrl(true);
+    setUrlUploadError(null);
+    setUrlUploadSuccess(null);
+
+    try {
+      console.log('URL Upload - Using session_id:', sessionId);
+      
+      const response = await fetch(API_ENDPOINTS.AI_UPLOAD_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          url: tempUrl.trim(),
+          session_id: sessionId,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'URL upload failed');
+      }
+
+      const data = await response.json();
+      
+      // Add to uploaded list
+      setUploadedUrls(prev => [...prev, tempUrl.trim()]);
+      setUrlUploadSuccess(`✓ URL uploaded! (${data.chunks_stored} chunks)`);
+      setTempUrl(''); // Clear input
+      
+      // Clear success message after 5 seconds
+      setTimeout(() => setUrlUploadSuccess(null), 5000);
+
+    } catch (error: any) {
+      console.error('URL upload error:', error);
+      setUrlUploadError(error.message || 'Failed to upload URL');
+      // Clear error after 5 seconds
+      setTimeout(() => setUrlUploadError(null), 5000);
+    } finally {
+      setIsUploadingUrl(false);
     }
   };
 
   const handleRemoveUrl = (urlToRemove: string) => {
-    setSourceUrls(prev => prev.filter(url => url !== urlToRemove));
+    setUploadedUrls(prev => prev.filter(url => url !== urlToRemove));
   };
 
   // Filter messages based on search query
@@ -276,36 +349,65 @@ export default function ChatPanel({
       <div className="p-4 lg:p-6 border-t-2 border-brand-border bg-brand-container">
         <div className="max-w-4xl mx-auto">
           <div className="mb-4">
+            {/* Success/Error Messages */}
+            {urlUploadSuccess && (
+              <div className="mb-3 p-3 bg-green-900/30 border border-green-700 text-green-300 rounded-xl text-sm flex items-center space-x-2 animate-in fade-in slide-in-from-top duration-300">
+                <CheckCircle size={16} />
+                <span>{urlUploadSuccess}</span>
+              </div>
+            )}
+            
+            {urlUploadError && (
+              <div className="mb-3 p-3 bg-red-900/30 border border-red-700 text-red-300 rounded-xl text-sm flex items-center space-x-2 animate-in fade-in slide-in-from-top duration-300">
+                <X size={16} />
+                <span>{urlUploadError}</span>
+              </div>
+            )}
+
             <div className="flex items-center space-x-2 mb-3">
               <input
                 type="text"
-                className="flex-1 bg-brand-dark text-white placeholder-gray-500 rounded-xl p-3 border-2 border-brand-border outline-none focus:border-brand-yellow transition-colors text-sm lg:text-base"
+                className="flex-1 bg-brand-dark text-white placeholder-gray-500 rounded-xl p-3 border-2 border-brand-border outline-none focus:border-brand-yellow transition-colors text-sm lg:text-base disabled:opacity-50 disabled:cursor-not-allowed"
                 placeholder="Paste a URL source (e.g., Google Scholar profile)..."
                 value={tempUrl}
                 onChange={(e) => setTempUrl(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
+                  if (e.key === 'Enter' && !isUploadingUrl) {
                     e.preventDefault();
                     handleAddUrl();
                   }
                 }}
+                disabled={isUploadingUrl}
               />
               <button
                 type="button"
                 onClick={handleAddUrl}
-                className="bg-brand-container border-2 border-brand-border text-white py-3 px-4 lg:px-6 rounded-xl hover:border-brand-yellow hover:bg-brand-dark transition-all duration-300 font-medium text-sm lg:text-base"
+                disabled={isUploadingUrl || !tempUrl.trim()}
+                className="bg-blue-600 text-white py-3 px-4 lg:px-6 rounded-xl hover:bg-blue-700 hover:shadow-lg hover:shadow-blue-500/50 transition-all duration-300 font-medium text-sm lg:text-base disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
               >
-                Add URL
+                {isUploadingUrl ? (
+                  <>
+                    <Loader2 size={18} className="animate-spin" />
+                    <span className="hidden sm:inline">Uploading...</span>
+                  </>
+                ) : (
+                  <>
+                    <Globe size={18} />
+                    <span className="hidden sm:inline">Add URL</span>
+                  </>
+                )}
               </button>
             </div>
-            {sourceUrls.length > 0 && (
+            {uploadedUrls.length > 0 && (
               <div className="flex flex-wrap gap-2">
-                {sourceUrls.map((url, index) => (
-                  <div key={index} className="bg-brand-dark border border-brand-yellow/50 text-sm text-brand-yellow rounded-full py-1.5 px-4 flex items-center gap-2 hover:bg-brand-yellow/10 transition-colors">
+                {uploadedUrls.map((url, index) => (
+                  <div key={index} className="bg-brand-dark border border-blue-500/50 text-sm text-blue-400 rounded-full py-1.5 px-4 flex items-center gap-2 hover:bg-blue-500/10 transition-colors">
+                    <Globe size={14} />
                     <span className="max-w-xs truncate">{url.length > 40 ? url.substring(0, 40) + '...' : url}</span>
-                    <button 
-                      onClick={() => handleRemoveUrl(url)} 
+                    <button
+                      onClick={() => handleRemoveUrl(url)}
                       className="text-red-500 hover:text-red-400 transition-colors"
+                      title="Remove URL"
                     >
                       <X size={16} />
                     </button>
