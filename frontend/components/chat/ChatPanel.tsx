@@ -176,17 +176,30 @@ export default function ChatPanel({
       formData.append('url', tempUrl.trim());
       formData.append('session_id', sessionId);
       
+      // Add timeout to prevent hanging
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout
+      
       const response = await fetch(API_ENDPOINTS.AI_UPLOAD_URL, {
         method: 'POST',
         body: formData, // Send as FormData, no Content-Type header needed
+        signal: controller.signal
       });
+      
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
-        const errorData = await response.json();
+        let errorData;
+        try {
+          errorData = await response.json();
+        } catch {
+          errorData = { error: `HTTP ${response.status}: ${response.statusText}` };
+        }
         throw new Error(errorData.error || 'URL upload failed');
       }
 
       const data = await response.json();
+      console.log('URL Upload response:', data);
       
       // Add to uploaded list
       setUploadedUrls(prev => [...prev, tempUrl.trim()]);
@@ -198,9 +211,18 @@ export default function ChatPanel({
 
     } catch (error: any) {
       console.error('URL upload error:', error);
-      setUrlUploadError(error.message || 'Failed to upload URL');
-      // Clear error after 5 seconds
-      setTimeout(() => setUrlUploadError(null), 5000);
+      
+      // Handle different error types
+      let errorMessage = 'Failed to upload URL';
+      if (error.name === 'AbortError') {
+        errorMessage = 'Upload timeout - URL took too long to process';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      setUrlUploadError(errorMessage);
+      // Clear error after 10 seconds for timeout errors
+      setTimeout(() => setUrlUploadError(null), error.name === 'AbortError' ? 10000 : 5000);
     } finally {
       setIsUploadingUrl(false);
     }

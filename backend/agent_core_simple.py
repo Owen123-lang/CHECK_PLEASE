@@ -183,15 +183,35 @@ class SimpleRAG:
                     print(f"[ROUTING] Person query with LIMITED database ({len(vector_results)} chars) → TIER 3 (External enrichment)")
                     return "COMPLEX"
         
+        # TIER 2: Publication queries (if database has info, use TIER 2 for speed!)
+        publication_patterns = [
+            r'\bpublikasi\b',
+            r'\bpublications?\b',
+            r'\bpaper\b',
+            r'\bkarya\s+(?:ilmiah|tulis)',
+            r'\bpenelitian\b.*\b(?:bidang|field)',
+            r'\bmengeluarkan\s+publikasi',
+            r'\bapa\s+(?:saja\s+)?publikasi',
+            r'\bdaftar\s+publikasi',
+            r'\blist\s+(?:of\s+)?publications',
+        ]
+        
+        for pattern in publication_patterns:
+            if re.search(pattern, query_lower):
+                # Check if we have person name + rich database
+                if len(vector_results) > 5000:
+                    print(f"[ROUTING] Publication query with RICH database ({len(vector_results)} chars) → TIER 2 (Fast LLM formatting)")
+                    return "BASIC_LOOKUP"
+                else:
+                    print(f"[ROUTING] Publication query with LIMITED database ({len(vector_results)} chars) → TIER 3 (Tool needed)")
+                    return "COMPLEX"
+        
         # TIER 3 indicators: Complex queries needing multi-step analysis
         complex_indicators = [
             r'\bcompare\b',
             r'\bbandingkan\b',
-            r'\bpublications?\s+(from|between|in)\b',
             r'\bh-?index\b',
             r'\bcitations?\s+count\b',
-            r'\bresearch\s+areas?\s+of\b',
-            r'\blist\s+all\s+publications\b',
         ]
         
         for pattern in complex_indicators:
