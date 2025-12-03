@@ -123,9 +123,12 @@ class SimpleRAG:
             r'\burl\b',
             r'\bwebsite\b',
             r'\blink\b',
+            r'\bwikipedia\b',
             r'\bhalaman\s+web',
-            r'\bjelaskan\s+isi\s+(?:url|website|link)',
-            r'\bringkas(?:an)?\s+(?:url|website)',
+            r'\bjelaskan\s+isi\s+(?:url|website|link|wikipedia)',
+            r'\bringkas(?:an)?\s+(?:url|website|wikipedia)',
+            r'\bisi\s+(?:url|website|link|wikipedia)',
+            r'\byang\s+baru\s+(?:saya\s+)?(?:masukkan|upload)',
         ]
         
         # Check for PDF query
