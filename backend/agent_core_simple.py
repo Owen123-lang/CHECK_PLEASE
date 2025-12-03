@@ -3,6 +3,8 @@ from dotenv import load_dotenv
 from crewai import Agent, Task, Crew, Process, LLM
 from tools import academic_search_tool, dynamic_web_scraper_tool, google_scholar_tool, cv_generator_tool, ui_scholar_search_tool, pdf_search_tool, url_search_tool
 import re
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
+import numpy as np
 
 load_dotenv()
 
@@ -35,6 +37,16 @@ class SimpleRAG:
             temperature=0.0,  # ⚡ 0.0 for fastest, most deterministic output
             max_tokens=1500,  # ⚡ Reduced for faster generation
         )
+        
+        # Initialize embedding model for semantic similarity
+        self.embeddings = GoogleGenerativeAIEmbeddings(
+            model="models/embedding-001",
+            google_api_key=api_key
+        )
+        
+        # Pre-compute embeddings for common query types (cache for speed!)
+        self._query_type_embeddings = {}
+        self._initialize_query_type_embeddings()
     
     def query(self, user_query: str, user_urls: list = None, conversation_history: list = None, session_id: str = None) -> str:
         """
@@ -183,7 +195,7 @@ class SimpleRAG:
                     print(f"[ROUTING] Person query with LIMITED database ({len(vector_results)} chars) → TIER 3 (External enrichment)")
                     return "COMPLEX"
         
-        # TIER 2: Publication queries (if database has info, use TIER 2 for speed!)
+        # TIER 2: Publication queries with HYBRID detection (Regex + Semantic Similarity)
         publication_patterns = [
             r'\bpublikasi\b',
             r'\bpublications?\b',
@@ -196,15 +208,31 @@ class SimpleRAG:
             r'\blist\s+(?:of\s+)?publications',
         ]
         
-        for pattern in publication_patterns:
-            if re.search(pattern, query_lower):
-                # Check if we have person name + rich database
-                if len(vector_results) > 5000:
-                    print(f"[ROUTING] Publication query with RICH database ({len(vector_results)} chars) → TIER 2 (Fast LLM formatting)")
-                    return "BASIC_LOOKUP"
-                else:
-                    print(f"[ROUTING] Publication query with LIMITED database ({len(vector_results)} chars) → TIER 3 (Tool needed)")
-                    return "COMPLEX"
+        # Step 1: Fast regex check
+        regex_match = any(re.search(pattern, query_lower) for pattern in publication_patterns)
+        
+        # Step 2: Semantic similarity fallback (for edge cases regex misses)
+        semantic_match = False
+        if not regex_match:
+            try:
+                similarity = self._compute_semantic_similarity(query, "publication")
+                print(f"[SEMANTIC] Publication similarity: {similarity:.3f}")
+                if similarity > 0.65:  # Threshold for publication queries
+                    semantic_match = True
+                    print(f"[SEMANTIC] ✓ Detected publication query via semantic similarity!")
+            except Exception as e:
+                print(f"[SEMANTIC] Similarity check failed: {e}")
+        
+        # If either regex OR semantic detects publication query
+        if regex_match or semantic_match:
+            detection_method = "regex" if regex_match else "semantic"
+            # Check if we have person name + rich database
+            if len(vector_results) > 5000:
+                print(f"[ROUTING] Publication query ({detection_method}) with RICH database ({len(vector_results)} chars) → TIER 2 (Fast LLM formatting)")
+                return "BASIC_LOOKUP"
+            else:
+                print(f"[ROUTING] Publication query ({detection_method}) with LIMITED database ({len(vector_results)} chars) → TIER 3 (Tool needed)")
+                return "COMPLEX"
         
         # TIER 3 indicators: Complex queries needing multi-step analysis
         complex_indicators = [
@@ -553,6 +581,67 @@ Ringkasan:"""
                 deduplicated_lines.append(line)
         
         return '\n'.join(deduplicated_lines)
+    
+    def _initialize_query_type_embeddings(self):
+        """
+        Pre-compute embeddings for common query types for faster similarity checks.
+        This is done once at initialization to avoid repeated API calls.
+        """
+        try:
+            query_type_examples = {
+                "publication": "research publications papers academic works scholarly articles",
+                "profile": "professor information biography background education career",
+                "list": "list all lecturers professors faculty staff members",
+            }
+            
+            print("[INIT] 🔧 Pre-computing query type embeddings...")
+            for query_type, example_text in query_type_examples.items():
+                embedding = self.embeddings.embed_query(example_text)
+                self._query_type_embeddings[query_type] = embedding
+            print(f"[INIT] ✓ Cached {len(self._query_type_embeddings)} query type embeddings")
+            
+        except Exception as e:
+            print(f"[INIT] ⚠️ Failed to pre-compute embeddings: {e}")
+            self._query_type_embeddings = {}
+    
+    def _compute_semantic_similarity(self, query: str, query_type: str) -> float:
+        """
+        Compute semantic similarity between query and a query type using cosine similarity.
+        
+        Args:
+            query: User's input query
+            query_type: Type to compare against (e.g., "publication", "profile")
+        
+        Returns:
+            float: Similarity score between 0 and 1
+        """
+        try:
+            # Get or compute query embedding
+            query_embedding = self.embeddings.embed_query(query)
+            
+            # Get cached type embedding
+            if query_type not in self._query_type_embeddings:
+                print(f"[SEMANTIC] Warning: No cached embedding for '{query_type}'")
+                return 0.0
+            
+            type_embedding = self._query_type_embeddings[query_type]
+            
+            # Compute cosine similarity
+            query_vec = np.array(query_embedding)
+            type_vec = np.array(type_embedding)
+            
+            # Normalize vectors
+            query_norm = query_vec / np.linalg.norm(query_vec)
+            type_norm = type_vec / np.linalg.norm(type_vec)
+            
+            # Cosine similarity
+            similarity = np.dot(query_norm, type_norm)
+            
+            return float(similarity)
+            
+        except Exception as e:
+            print(f"[SEMANTIC] Error computing similarity: {e}")
+            return 0.0
     
     def _emergency_fallback(self, query: str) -> str:
         """Emergency fallback response."""
