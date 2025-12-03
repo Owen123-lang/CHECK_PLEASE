@@ -631,16 +631,40 @@ Please try again with a more specific question!"""
             
             # Build task description based on query type
             if is_pdf_query:
-                # CRITICAL: For PDF/URL queries, SKIP vector search context to avoid token limit
-                task_description = f"""Answer this query in Indonesian: "{query}"
+                # Detect if it's specifically about URL/website
+                query_lower = query.lower()
+                is_url_specific = any(kw in query_lower for kw in ['wikipedia', 'url', 'website', 'web', 'link', 'isi website', 'dari website', 'isi url'])
+                
+                if is_url_specific:
+                    # URL-ONLY query - Don't mention PDF tool at all
+                    task_description = f"""Answer this query in Indonesian: "{query}"
+
+**AVAILABLE TOOL:**
+- 'User URL Search Tool' - Use this to find content from uploaded URLs (websites)
+
+**INSTRUCTIONS:**
+1. Call 'User URL Search Tool' with query: "{query}"
+2. Format the results in Indonesian with:
+   - Use ## for headers
+   - Use bullet points (-)
+   - Keep it readable and organized
+3. If tool returns "No URL content found", say: "Maaf, tidak ada URL yang ditemukan. Silakan upload URL terlebih dahulu."
+
+**CRITICAL:**
+- ONLY use URL Search Tool - DO NOT use PDF Search Tool
+- Return ACTUAL summarized content in Indonesian
+- NO JSON responses - only human-readable text"""
+                else:
+                    # PDF-ONLY or mixed query
+                    task_description = f"""Answer this query in Indonesian: "{query}"
 
 **AVAILABLE TOOLS:**
 - 'User PDF Search Tool' - Use this to find content from uploaded PDFs
 - 'User URL Search Tool' - Use this to find content from uploaded URLs (websites)
 
 **INSTRUCTIONS:**
-1. **Try URL tool FIRST** by calling 'User URL Search Tool' with query: "{query}"
-2. If URL tool returns "No URL content found", then try 'User PDF Search Tool' with query: "{query}"
+1. **Try PDF tool FIRST** by calling 'User PDF Search Tool' with query: "{query}"
+2. If PDF tool returns "No PDF found", then try 'User URL Search Tool' with query: "{query}"
 3. After tool returns results, format them in Indonesian with:
    - Use ## for headers
    - Use bullet points (-)
@@ -650,8 +674,7 @@ Please try again with a more specific question!"""
 **CRITICAL:**
 - EXECUTE the tools, don't just describe them
 - Return ACTUAL summarized content in Indonesian
-- NO JSON responses - only human-readable text
-- If query mentions "wikipedia" or "url" or "website", prioritize URL tool"""
+- NO JSON responses - only human-readable text"""
             elif is_publication_query:
                 task_description = f"""{context_prefix}Answer: "{query}"
 
