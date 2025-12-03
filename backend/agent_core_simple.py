@@ -54,7 +54,17 @@ class SimpleRAG:
             query_type = self._detect_query_type(user_query, vector_results)
             print(f"\n[STEP 2] 🎯 Query Type: {query_type}")
             
-            if query_type == "SIMPLE_LIST":
+            if query_type == "PDF_QUERY":
+                # TIER 0: Direct PDF tool (no CrewAI!)
+                print("[TIER 0] 📄 PDF query - Direct tool call")
+                result = self._direct_pdf_query(user_query, session_id)
+                
+            elif query_type == "URL_QUERY":
+                # TIER 0: Direct URL tool (no CrewAI!)
+                print("[TIER 0] 🌐 URL query - Direct tool call")
+                result = self._direct_url_query(user_query, session_id)
+                
+            elif query_type == "SIMPLE_LIST":
                 # Use TIER 2 for list queries (LLM formatting is more reliable than regex)
                 print("[TIER 2] 📋 Simple list query - Using LLM to format database results")
                 result = self._basic_lookup(user_query, vector_results)
@@ -92,8 +102,43 @@ class SimpleRAG:
         - SIMPLE_LIST: Just list names/items from database
         - BASIC_LOOKUP: Simple lookup with rich database results (FAST!)
         - COMPLEX: Multi-step research or needs external validation
+        
+        SPECIAL: PDF_QUERY and URL_QUERY bypass CrewAI completely!
         """
         query_lower = query.lower()
+        
+        # ⚡ PRIORITY: Detect PDF/URL queries FIRST (bypass all other routing!)
+        pdf_keywords = [
+            r'\bpdf\b',
+            r'\bdokumen\b',
+            r'\bfile\b',
+            r'\bjelaskan\s+isi\s+pdf',
+            r'\bringkas(?:an)?\s+pdf',
+            r'\bsummariz[e]?\s+(?:the\s+)?pdf',
+            r'\bexplain\s+(?:the\s+)?pdf',
+            r'\bapa\s+isi\s+pdf',
+        ]
+        
+        url_keywords = [
+            r'\burl\b',
+            r'\bwebsite\b',
+            r'\blink\b',
+            r'\bhalaman\s+web',
+            r'\bjelaskan\s+isi\s+(?:url|website|link)',
+            r'\bringkas(?:an)?\s+(?:url|website)',
+        ]
+        
+        # Check for PDF query
+        for pattern in pdf_keywords:
+            if re.search(pattern, query_lower):
+                print(f"[ROUTING] 📄 PDF query detected → Direct PDF tool (TIER 0)")
+                return "PDF_QUERY"
+        
+        # Check for URL query
+        for pattern in url_keywords:
+            if re.search(pattern, query_lower):
+                print(f"[ROUTING] 🌐 URL query detected → Direct URL tool (TIER 0)")
+                return "URL_QUERY"
         
         # TIER 1: Simple list queries
         simple_list_patterns = [
@@ -304,6 +349,76 @@ Answer:"""
             print(f"[TIER 2] LLM error: {e}")
             # Fallback to raw results
             return f"Based on database:\n\n{vector_results[:1000]}"
+    
+    def _direct_pdf_query(self, query: str, session_id: str = None) -> str:
+        """
+        TIER 0: Direct PDF tool call (NO CrewAI agents!)
+        Ultra-fast response for PDF queries.
+        """
+        print("[TIER 0] 📄 Calling PDF tool directly...")
+        
+        try:
+            # Call PDF tool directly
+            result = pdf_search_tool._run(query, session_id=session_id)
+            
+            if "No PDF found" in result or "tidak ditemukan" in result.lower():
+                return "❌ **Tidak ada PDF yang ditemukan**\n\nSilakan upload PDF terlebih dahulu menggunakan tombol 📎 di bawah."
+            
+            # Format with LLM for better presentation
+            prompt = f"""Ringkas dan jelaskan isi PDF berikut dalam bahasa Indonesia yang mudah dipahami.
+
+Isi PDF:
+{result[:4000]}
+
+INSTRUKSI:
+1. Gunakan format markdown yang rapi (## untuk header, - untuk bullet points)
+2. Buat ringkasan yang jelas dan terstruktur
+3. Jangan tambahkan informasi yang tidak ada di PDF
+4. Maksimal 400 kata
+
+Ringkasan:"""
+            
+            formatted = self.llm.call([{"role": "user", "content": prompt}])
+            return str(formatted)
+            
+        except Exception as e:
+            print(f"[TIER 0] PDF tool error: {e}")
+            return f"⚠️ Error saat membaca PDF: {str(e)}\n\nSilakan coba lagi atau upload PDF yang berbeda."
+    
+    def _direct_url_query(self, query: str, session_id: str = None) -> str:
+        """
+        TIER 0: Direct URL tool call (NO CrewAI agents!)
+        Ultra-fast response for URL queries.
+        """
+        print("[TIER 0] 🌐 Calling URL tool directly...")
+        
+        try:
+            # Call URL tool directly
+            result = url_search_tool._run(query, session_id=session_id)
+            
+            if "No URL found" in result or "tidak ditemukan" in result.lower():
+                return "❌ **Tidak ada URL yang ditemukan**\n\nSilakan upload URL terlebih dahulu menggunakan tombol 🔗 di bawah."
+            
+            # Format with LLM for better presentation
+            prompt = f"""Ringkas dan jelaskan isi website/URL berikut dalam bahasa Indonesia yang mudah dipahami.
+
+Isi Website:
+{result[:4000]}
+
+INSTRUKSI:
+1. Gunakan format markdown yang rapi (## untuk header, - untuk bullet points)
+2. Buat ringkasan yang jelas dan terstruktur
+3. Jangan tambahkan informasi yang tidak ada di website
+4. Maksimal 400 kata
+
+Ringkasan:"""
+            
+            formatted = self.llm.call([{"role": "user", "content": prompt}])
+            return str(formatted)
+            
+        except Exception as e:
+            print(f"[TIER 0] URL tool error: {e}")
+            return f"⚠️ Error saat membaca URL: {str(e)}\n\nSilakan coba lagi atau upload URL yang berbeda."
     
     def _complex_query(self, query: str, vector_results: str, conversation_history: list = None, session_id: str = None) -> str:
         """
