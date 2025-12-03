@@ -171,15 +171,14 @@ export default function ChatPanel({
     try {
       console.log('URL Upload - Using session_id:', sessionId);
       
+      // Create FormData (backend expects Form parameters, not JSON)
+      const formData = new FormData();
+      formData.append('url', tempUrl.trim());
+      formData.append('session_id', sessionId);
+      
       const response = await fetch(API_ENDPOINTS.AI_UPLOAD_URL, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          url: tempUrl.trim(),
-          session_id: sessionId,
-        }),
+        body: formData, // Send as FormData, no Content-Type header needed
       });
 
       if (!response.ok) {
