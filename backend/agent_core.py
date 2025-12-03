@@ -573,12 +573,14 @@ Please try again with a more specific question!"""
                 'publications', 'publikasi', 'research', 'penelitian', 'papers', 'karya', 'list of', 'daftar'
             ])
             
-            # NEW: Detect if query is asking about uploaded PDF
+            # NEW: Detect if query is asking about uploaded PDF or URL
             query_lower = query.lower()
             is_pdf_query = any(keyword in query_lower for keyword in [
                 'pdf', 'dokumen', 'document', 'file', 'upload', 'yang saya kasih', 'yang saya berikan',
                 'dari pdf', 'isi pdf', 'rangkum', 'summarize', 'jelasin', 'explain', 'jelaskan',
-                'apa isi', 'what is in', 'contents of', 'isi dari', 'tentang pdf'
+                'apa isi', 'what is in', 'contents of', 'isi dari', 'tentang pdf',
+                'url', 'website', 'web', 'link', 'wikipedia', 'dari url', 'isi url', 'isi website',
+                'dari website', 'yang saya upload', 'yang diupload'
             ])
             
             # Create the agent
@@ -629,24 +631,27 @@ Please try again with a more specific question!"""
             
             # Build task description based on query type
             if is_pdf_query:
-                # CRITICAL: For PDF queries, SKIP vector search context to avoid token limit
+                # CRITICAL: For PDF/URL queries, SKIP vector search context to avoid token limit
                 task_description = f"""Answer this query in Indonesian: "{query}"
 
 **AVAILABLE TOOLS:**
 - 'User PDF Search Tool' - Use this to find content from uploaded PDFs
+- 'User URL Search Tool' - Use this to find content from uploaded URLs (websites)
 
 **INSTRUCTIONS:**
-1. Call the 'User PDF Search Tool' with query: "{query}"
-2. After tool returns results, format them in Indonesian with:
+1. **Try URL tool FIRST** by calling 'User URL Search Tool' with query: "{query}"
+2. If URL tool returns "No URL content found", then try 'User PDF Search Tool' with query: "{query}"
+3. After tool returns results, format them in Indonesian with:
    - Use ## for headers
    - Use bullet points (-)
    - Keep it readable and organized
-3. If tool returns "No PDF found", say: "Maaf, tidak ada PDF yang ditemukan. Silakan upload PDF terlebih dahulu."
+4. If both tools return nothing, say: "Maaf, tidak ada PDF atau URL yang ditemukan. Silakan upload PDF atau URL terlebih dahulu."
 
 **CRITICAL:**
-- EXECUTE the tool, don't just describe it
+- EXECUTE the tools, don't just describe them
 - Return ACTUAL summarized content in Indonesian
-- NO JSON responses - only human-readable text"""
+- NO JSON responses - only human-readable text
+- If query mentions "wikipedia" or "url" or "website", prioritize URL tool"""
             elif is_publication_query:
                 task_description = f"""{context_prefix}Answer: "{query}"
 
