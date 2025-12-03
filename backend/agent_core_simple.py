@@ -32,13 +32,13 @@ class SimpleRAG:
         self.llm = LLM(
             model="gemini/gemini-2.5-pro",
             api_key=api_key,
-            temperature=0.1,  # Lower for more deterministic output
-            max_tokens=2000,  # Pro has better capacity
+            temperature=0.0,  # ⚡ 0.0 for fastest, most deterministic output
+            max_tokens=1500,  # ⚡ Reduced for faster generation
         )
     
     def query(self, user_query: str, user_urls: list = None, conversation_history: list = None, session_id: str = None) -> str:
         """
-        Smart routing based on query complexity.
+        Smart routing based on query complexity with PERFORMANCE OPTIMIZATION.
         """
         try:
             print("\n" + "=" * 70)
@@ -50,8 +50,8 @@ class SimpleRAG:
             print("\n[STEP 1] 🔎 Vector Search...")
             vector_results = self._vector_search(user_query)
             
-            # STEP 2: Detect query type and route
-            query_type = self._detect_query_type(user_query)
+            # STEP 2: Smart routing based on query AND database richness
+            query_type = self._detect_query_type(user_query, vector_results)
             print(f"\n[STEP 2] 🎯 Query Type: {query_type}")
             
             if query_type == "SIMPLE_LIST":
@@ -86,16 +86,16 @@ class SimpleRAG:
             traceback.print_exc()
             return self._emergency_fallback(user_query)
     
-    def _detect_query_type(self, query: str) -> str:
+    def _detect_query_type(self, query: str, vector_results: str = "") -> str:
         """
-        Classify query into 3 tiers:
-        - SIMPLE_LIST: Just list names/items from database (NO external search needed)
-        - BASIC_LOOKUP: Single person lookup (NEEDS external search for enrichment)
-        - COMPLEX: Multi-step research needed (FULL CrewAI)
+        Classify query into 3 tiers with SMART ROUTING:
+        - SIMPLE_LIST: Just list names/items from database
+        - BASIC_LOOKUP: Simple lookup with rich database results (FAST!)
+        - COMPLEX: Multi-step research or needs external validation
         """
         query_lower = query.lower()
         
-        # TIER 1: ONLY simple list queries that don't need external search
+        # TIER 1: Simple list queries
         simple_list_patterns = [
             r'\blist\s+(all|of)?\s*(the)?\s*lecturers?',
             r'\blist\s+(all|of)?\s*(the)?\s*professors?',
@@ -110,30 +110,48 @@ class SimpleRAG:
             if re.search(pattern, query_lower):
                 return "SIMPLE_LIST"
         
-        # TIER 2: Person lookup queries (use COMPLEX for better results with tools)
-        # Changed strategy: For specific person queries, use COMPLEX (TIER 3) to leverage SINTA/Scholar
+        # TIER 2 vs TIER 3: Person lookup with SMART routing
         person_lookup_patterns = [
             r'\bwho\s+is\b',
             r'\bsiapa\s+(itu)?\b',
             r'\btell\s+me\s+about\b',
             r'\binformation\s+about\b',
             r'\bprofile\s+of\b',
-            r'\bfind\s+.*(about|information)',
-            r'\bsearch\s+for\b',
-            r'\bresearch\s+by\b',
-            r'\bpublication.*by\b',
+            r'\bjelaskan\s+tentang\b',
+            r'\bjelaskan\s+kepada\s+saya\b',
         ]
         
         # Check if query mentions a specific person name
         has_person_name = bool(re.search(r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b', query))
         
-        # If asking about specific person → Use COMPLEX tier for SINTA/Scholar enrichment
+        # SMART DECISION: Check database richness
         for pattern in person_lookup_patterns:
             if re.search(pattern, query_lower) and has_person_name:
-                print(f"[ROUTING] Person query detected with name → Using COMPLEX tier for external search")
+                # ✅ If database has rich results (>10KB), use TIER 2 (FAST!)
+                if len(vector_results) > 10000:
+                    print(f"[ROUTING] Person query with RICH database ({len(vector_results)} chars) → TIER 2 (Fast LLM formatting)")
+                    return "BASIC_LOOKUP"
+                else:
+                    print(f"[ROUTING] Person query with LIMITED database ({len(vector_results)} chars) → TIER 3 (External enrichment)")
+                    return "COMPLEX"
+        
+        # TIER 3 indicators: Complex queries needing multi-step analysis
+        complex_indicators = [
+            r'\bcompare\b',
+            r'\bbandingkan\b',
+            r'\bpublications?\s+(from|between|in)\b',
+            r'\bh-?index\b',
+            r'\bcitations?\s+count\b',
+            r'\bresearch\s+areas?\s+of\b',
+            r'\blist\s+all\s+publications\b',
+        ]
+        
+        for pattern in complex_indicators:
+            if re.search(pattern, query_lower):
+                print(f"[ROUTING] Complex analysis needed → TIER 3")
                 return "COMPLEX"
         
-        # TIER 3: Everything else (complex queries, comparisons, etc.)
+        # Default: TIER 3 for safety
         return "COMPLEX"
     
     def _direct_list_answer(self, query: str, vector_results: str) -> str:
